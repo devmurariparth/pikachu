@@ -352,6 +352,20 @@ class ChatViewModel : ViewModel() {
         }
 
         // =========================================================================
+        // FAST DIRECT SMS MESSAGING INTENT
+        // =========================================================================
+        val smsMatch = com.example.sms.SmsActionManager.parseSmsCommand(trimmed)
+        if (smsMatch != null) {
+            val res = com.example.sms.SmsActionManager.sendSms(context, smsMatch.first, smsMatch.second)
+            _messages.value = _messages.value + ChatMessage(
+                sender = MessageSender.AI,
+                text = res.spokenMessage
+            )
+            voiceManager?.speak(res.spokenMessage)
+            return
+        }
+
+        // =========================================================================
         // FAST DIRECT TASKS & REMINDERS (Room Database + WorkManager)
         // =========================================================================
         if (trimmed.startsWith("remind me", ignoreCase = true) ||

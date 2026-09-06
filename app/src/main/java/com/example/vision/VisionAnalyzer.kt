@@ -148,7 +148,7 @@ object VisionAnalyzer {
         """.trimIndent()
 
         val apiResult = com.example.network.safeApiCall {
-            withTimeout(30000L) {
+            withTimeout(45000L) {
                 val request = GenerateContentRequest(
                     contents = listOf(
                         Content(
@@ -160,9 +160,9 @@ object VisionAnalyzer {
                         )
                     ),
                     systemInstruction = Content(
-                        parts = listOf(Part(text = systemPrompt)),
-                        role = "model"
-                    )
+                        parts = listOf(Part(text = systemPrompt))
+                    ),
+                    generationConfig = com.example.network.GenerationConfig(temperature = 0.2f)
                 )
 
                 RetrofitClient.service.generateVisionContent(

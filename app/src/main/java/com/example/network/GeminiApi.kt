@@ -59,19 +59,19 @@ data class Candidate(
 )
 
 interface GeminiApiService {
-    @POST("v1beta/models/gemini-2.5-pro:generateContent")
+    @POST("v1beta/models/gemini-3.1-pro-preview:generateContent")
     suspend fun generateProContent(
         @Query("key") apiKey: String,
         @Body request: GenerateContentRequest
     ): GenerateContentResponse
 
-    @POST("v1beta/models/gemini-2.5-flash:generateContent")
+    @POST("v1beta/models/gemini-3.6-flash:generateContent")
     suspend fun generateFlashContent(
         @Query("key") apiKey: String,
         @Body request: GenerateContentRequest
     ): GenerateContentResponse
 
-    @POST("v1beta/models/gemini-2.5-flash:generateContent")
+    @POST("v1beta/models/gemini-3.6-flash:generateContent")
     suspend fun generateVisionContent(
         @Query("key") apiKey: String,
         @Body request: GenerateContentRequest

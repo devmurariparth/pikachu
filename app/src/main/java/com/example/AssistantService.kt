@@ -103,11 +103,7 @@ class AssistantService : AccessibilityService() {
                         try {
                             val hardwareBuffer = screenshotResult.hardwareBuffer
                             val colorSpace = screenshotResult.colorSpace
-                            val bitmap = if (colorSpace != null) {
-                                android.graphics.Bitmap.wrapHardwareBuffer(hardwareBuffer, colorSpace)
-                            } else {
-                                android.graphics.Bitmap.wrapHardwareBuffer(hardwareBuffer, null)
-                            }
+                            val bitmap = android.graphics.Bitmap.wrapHardwareBuffer(hardwareBuffer, colorSpace)
                             hardwareBuffer.close()
 
                             if (bitmap != null) {

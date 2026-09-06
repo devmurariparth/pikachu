@@ -1,15 +1,29 @@
 # ============================================
-# OpenDroid — Production ProGuard/R8 Rules
+# MJ Assistant — Production ProGuard/R8 Rules
 # ============================================
 
 # ── App classes ──
+-keep class com.example.** { *; }
+-keepclassmembers class com.example.** { *; }
+
+# Keep data models, Room, and serialization
+-keep @kotlinx.serialization.Serializable class com.example.** { *; }
+-keepclassmembers @kotlinx.serialization.Serializable class com.example.** {
+    *** Companion;
+    *** serializer(...);
+}
+-keep interface com.example.network.** { *; }
+-keep class com.example.network.** { *; }
+-keep class com.example.data.** { *; }
+-keep class com.example.viewmodel.** { *; }
+-keep class com.example.ui.** { *; }
+
+# Legacy OpenDroid rules (backwards compatibility)
 -keep class com.mj.ai.core.llm.** { *; }
 -keep class com.mj.ai.data.models.** { *; }
 -keep class com.mj.ai.data.db.entities.** { *; }
 -keep class com.mj.ai.data.db.dao.** { *; }
 -keep class com.mj.ai.accessibility.** { *; }
-
-# Keep action schema (used by reflection/serialization)
 -keep class com.mj.ai.actions.** { *; }
 
 # ── Room Database ──

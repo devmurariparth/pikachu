@@ -31,10 +31,13 @@ object ActionPlanner {
         ACTION_TYPE can be:
         - OPEN_APP (payload: android package name like 'com.whatsapp', 'com.instagram.android', 'com.google.android.youtube', 'com.android.chrome')
         - SEARCH_WEB (payload: the search query)
+        - OPEN_URL (payload: https URL to open in browser)
         - CALL (payload: phone number or contact name)
+        - SEND_SMS (payload: 'contact|message' or 'number|message' - opens SMS app with recipient and text prefilled)
         - OPEN_SETTINGS (payload: null)
         - NAVIGATE (payload: destination name)
         - SET_ALARM (payload: hour in 24h format as string, e.g. "7")
+        - SET_TIMER (payload: duration in minutes as string, e.g. "5")
         - GO_HOME (payload: null)
         - GO_BACK (payload: null)
         - OPEN_NOTIFICATIONS (payload: null)
@@ -90,10 +93,11 @@ object ActionPlanner {
         }
 
         val apiResult = com.example.network.safeApiCall {
-            withTimeout(15000L) {
+            withTimeout(45000L) {
                 val request = GenerateContentRequest(
                     contents = listOf(Content(parts = listOf(Part(text = query)), role = "user")),
-                    systemInstruction = Content(parts = listOf(Part(text = getCompleteSystemPrompt())), role = "model")
+                    systemInstruction = Content(parts = listOf(Part(text = getCompleteSystemPrompt()))),
+                    generationConfig = com.example.network.GenerationConfig(temperature = 0.2f)
                 )
                 
                 RetrofitClient.service.generateFlashContent(
@@ -112,17 +116,40 @@ object ActionPlanner {
                 AssistantLogger.d(taskId, "Raw AI response: $jsonText")
                 
                 val cleanJson = jsonText.replace("```json", "").replace("```", "").trim()
-                
-                val actionMatch = "\"action\"\\s*:\\s*\"([^\"]+)\"".toRegex().find(cleanJson)
-                val payloadMatch = "\"payload\"\\s*:\\s*\"([^\"]+)\"".toRegex().find(cleanJson)
-                val speechMatch = "\"speech\"\\s*:\\s*\"([^\"]+)\"".toRegex().find(cleanJson)
-                val langMatch = "\"lang\"\\s*:\\s*\"([^\"]+)\"".toRegex().find(cleanJson)
-                
-                val action = actionMatch?.groupValues?.get(1) ?: "CHAT"
-                val payload = payloadMatch?.groupValues?.get(1).takeIf { it != "null" && it != "" }
-                val speech = speechMatch?.groupValues?.get(1) ?: "Done."
-                val language = langMatch?.groupValues?.get(1)?.lowercase() ?: "en"
-                
+
+                var action = "CHAT"
+                var payload: String? = null
+                var speech = "Done."
+                var language = "en"
+
+                val jsonParsed = try {
+                    val firstBrace = cleanJson.indexOf('{')
+                    val lastBrace = cleanJson.lastIndexOf('}')
+                    if (firstBrace != -1 && lastBrace != -1 && lastBrace > firstBrace) {
+                        val jsonSubstring = cleanJson.substring(firstBrace, lastBrace + 1)
+                        val jsonObj = org.json.JSONObject(jsonSubstring)
+                        action = jsonObj.optString("action", "CHAT")
+                        payload = if (jsonObj.isNull("payload")) null else jsonObj.optString("payload").takeIf { it.isNotBlank() && it != "null" }
+                        speech = jsonObj.optString("speech", "Done.")
+                        language = jsonObj.optString("lang", "en").lowercase()
+                        true
+                    } else false
+                } catch (e: Exception) {
+                    false
+                }
+
+                if (!jsonParsed) {
+                    val actionMatch = "\"action\"\\s*:\\s*\"([^\"]+)\"".toRegex().find(cleanJson)
+                    val payloadMatch = "\"payload\"\\s*:\\s*\"([^\"]+)\"".toRegex().find(cleanJson)
+                    val speechMatch = "\"speech\"\\s*:\\s*\"([^\"]+)\"".toRegex().find(cleanJson)
+                    val langMatch = "\"lang\"\\s*:\\s*\"([^\"]+)\"".toRegex().find(cleanJson)
+
+                    action = actionMatch?.groupValues?.get(1) ?: "CHAT"
+                    payload = payloadMatch?.groupValues?.get(1).takeIf { it != "null" && it != "" }
+                    speech = speechMatch?.groupValues?.get(1) ?: "Done."
+                    language = langMatch?.groupValues?.get(1)?.lowercase() ?: "en"
+                }
+
                 val plannedAction = PlannedAction(action, payload, speech, language)
                 AssistantLogger.i(taskId, "Planned action: $plannedAction")
                 Result.success(plannedAction)

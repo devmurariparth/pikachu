@@ -152,8 +152,8 @@ object WhatsAppManager {
         for (patternStr in patterns) {
             val matcher = java.util.regex.Pattern.compile(patternStr).matcher(trimmed)
             if (matcher.matches()) {
-                val contact = matcher.group(1).trim()
-                val message = if (matcher.groupCount() >= 2) matcher.group(2).trim() else null
+                val contact = matcher.group(1)?.trim() ?: return null
+                val message = if (matcher.groupCount() >= 2) matcher.group(2)?.trim() else null
                 return Pair(contact, message)
             }
         }

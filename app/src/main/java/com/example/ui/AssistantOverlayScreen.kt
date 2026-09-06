@@ -53,7 +53,7 @@ import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Visibility
-import androidx.compose.material.icons.rounded.VolumeUp
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -1108,7 +1108,7 @@ fun PremiumChatMessageItem(
                     ) {
                         if (message.isSpoken) {
                             Icon(
-                                imageVector = Icons.Rounded.VolumeUp,
+                                imageVector = Icons.AutoMirrored.Rounded.VolumeUp,
                                 contentDescription = "Spoken by MJ",
                                 tint = if (isDark) Color(0xFF38BDF8) else Color(0xFF4F46E5),
                                 modifier = Modifier.size(12.dp)

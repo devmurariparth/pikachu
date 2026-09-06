@@ -9,8 +9,10 @@ import android.net.Uri
 import android.os.Build
 import android.provider.AlarmClock
 import android.provider.Settings
+import com.example.contact.ContactsManager
 import com.example.data.BatteryOptimizationManager
 import com.example.data.UserMemoryManager
+import com.example.sms.SmsActionManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -46,13 +48,42 @@ object OfflineActionHandler {
         "files" to "com.google.android.apps.nbu.files"
     )
 
+    /**
+     * Normalizes natural language queries:
+     * - Strips surrounding punctuation (. , ! ?)
+     * - Removes conversational filler prefixes ("can you please", "hey mj", "could you")
+     */
+    fun normalizeCommand(query: String): String {
+        var text = query.trim().lowercase()
+        // Strip trailing and leading punctuation
+        text = text.replace(Regex("^[\\p{Punct}\\s]+|[\\p{Punct}\\s]+$"), "").trim()
+
+        val prefixes = listOf(
+            "hey mj please ", "hey mj can you ", "hey mj could you ", "hey mj ",
+            "ok mj please ", "ok mj can you ", "ok mj ",
+            "okay mj please ", "okay mj ",
+            "mj please ", "mj can you ", "mj could you ", "mj ",
+            "can you please ", "could you please ", "would you please ",
+            "can you ", "could you ", "would you mind ", "please "
+        )
+        for (prefix in prefixes) {
+            if (text.startsWith(prefix)) {
+                text = text.removePrefix(prefix).trim()
+                break
+            }
+        }
+        return text
+    }
+
     suspend fun handleOfflineCommand(context: Context, query: String): OfflineExecutionResult {
         val raw = query.trim()
-        val lower = raw.lowercase().trim()
-        AssistantLogger.i(TAG, "Processing offline query: '$raw'")
+        val normalized = normalizeCommand(raw)
+        val lower = normalized.lowercase()
+        AssistantLogger.i(TAG, "Processing offline query: raw='$raw', normalized='$normalized'")
 
         // 1. WhatsApp Voice Command ("Send a WhatsApp to [contact]")
-        val whatsAppMatch = WhatsAppManager.parseWhatsAppVoiceCommand(raw)
+        val whatsAppMatch = WhatsAppManager.parseWhatsAppVoiceCommand(normalized)
+            ?: WhatsAppManager.parseWhatsAppVoiceCommand(raw)
         if (whatsAppMatch != null) {
             val res = WhatsAppManager.sendWhatsApp(context, whatsAppMatch.first, whatsAppMatch.second)
             return OfflineExecutionResult(
@@ -62,8 +93,20 @@ object OfflineActionHandler {
             )
         }
 
-        // 1.2. Tasks & Reminders via Room Database & WorkManager
-        val taskResult = com.example.data.task.TaskManager.handleVoiceQuery(raw)
+        // 2. SMS / Text Messaging ("Text [contact] [message]")
+        val smsMatch = SmsActionManager.parseSmsCommand(normalized)
+            ?: SmsActionManager.parseSmsCommand(raw)
+        if (smsMatch != null) {
+            val res = SmsActionManager.sendSms(context, smsMatch.first, smsMatch.second)
+            return OfflineExecutionResult(
+                handled = true,
+                spokenResponse = res.spokenMessage,
+                actionTaken = "SEND_SMS"
+            )
+        }
+
+        // 3. Tasks & Reminders via Room Database & WorkManager
+        val taskResult = com.example.data.task.TaskManager.handleVoiceQuery(normalized)
         if (taskResult !is com.example.data.task.TaskVoiceResult.NotHandled) {
             val message = when (taskResult) {
                 is com.example.data.task.TaskVoiceResult.Created -> taskResult.message
@@ -79,11 +122,11 @@ object OfflineActionHandler {
             )
         }
 
-        // 1.3. Device Controls: Wi-Fi
+        // 4. Device Controls: Wi-Fi
         if (lower.contains("wifi") || lower.contains("wi-fi") || lower.contains("internet connection")) {
             val turnOn = when {
-                lower.contains("on") || lower.contains("enable") || lower.contains("turn on") -> true
-                lower.contains("off") || lower.contains("disable") || lower.contains("turn off") -> false
+                lower.contains("on") || lower.contains("enable") || lower.contains("connect") -> true
+                lower.contains("off") || lower.contains("disable") || lower.contains("disconnect") -> false
                 else -> null
             }
             val res = com.example.device.DeviceControlManager.toggleWifi(context, turnOn)
@@ -95,11 +138,11 @@ object OfflineActionHandler {
             )
         }
 
-        // 1.4. Device Controls: Bluetooth
+        // 5. Device Controls: Bluetooth
         if (lower.contains("bluetooth")) {
             val turnOn = when {
-                lower.contains("on") || lower.contains("enable") || lower.contains("turn on") -> true
-                lower.contains("off") || lower.contains("disable") || lower.contains("turn off") -> false
+                lower.contains("on") || lower.contains("enable") || lower.contains("connect") -> true
+                lower.contains("off") || lower.contains("disable") || lower.contains("disconnect") -> false
                 else -> null
             }
             val res = com.example.device.DeviceControlManager.toggleBluetooth(context, turnOn)
@@ -111,7 +154,7 @@ object OfflineActionHandler {
             )
         }
 
-        // 1.5. Device Controls: Screen Brightness
+        // 6. Device Controls: Screen Brightness
         if (lower.contains("brightness") || lower.contains("dim screen") || lower.contains("brighten screen")) {
             val percent = when {
                 lower.contains("max") || lower.contains("100") || lower.contains("full") -> 100
@@ -133,7 +176,7 @@ object OfflineActionHandler {
             )
         }
 
-        // 1.6. Quick Settings
+        // 7. Quick Settings
         if (lower.contains("quick settings") || lower == "open quick settings") {
             val res = com.example.device.DeviceControlManager.openQuickSettings()
             return OfflineExecutionResult(
@@ -144,7 +187,7 @@ object OfflineActionHandler {
             )
         }
 
-        // 1.7. Battery inquiries
+        // 8. Battery inquiries
         if (lower.contains("battery") || lower == "power level") {
             val status = BatteryOptimizationManager.getBatteryStatusSummary()
             return OfflineExecutionResult(
@@ -154,7 +197,7 @@ object OfflineActionHandler {
             )
         }
 
-        // 1.5. User Memories ("what do you remember", "what are my preferences", "show memories")
+        // 9. User Memories
         if (lower.contains("what do you remember") || lower.contains("what are my memories") || lower.contains("my preferences") || lower == "show memories") {
             val summary = UserMemoryManager.getMemoriesSummaryText()
             return OfflineExecutionResult(
@@ -164,8 +207,8 @@ object OfflineActionHandler {
             )
         }
 
-        // 2. Time and Date inquiries
-        if (lower.contains("what time") || lower == "time" || lower == "current time") {
+        // 10. Time and Date inquiries
+        if (lower.contains("what time") || lower == "time" || lower == "current time" || lower.contains("tell me the time")) {
             val time = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())
             return OfflineExecutionResult(
                 handled = true,
@@ -174,7 +217,7 @@ object OfflineActionHandler {
             )
         }
 
-        if (lower.contains("what date") || lower.contains("today's date") || lower == "date") {
+        if (lower.contains("what date") || lower.contains("today's date") || lower == "date" || lower.contains("what is today")) {
             val date = SimpleDateFormat("EEEE, MMMM d, yyyy", Locale.getDefault()).format(Date())
             return OfflineExecutionResult(
                 handled = true,
@@ -183,7 +226,16 @@ object OfflineActionHandler {
             )
         }
 
-        // 3. System Navigation
+        // 11. Weather inquiries (Offline explanation)
+        if (lower.contains("weather") || lower.contains("forecast") || lower.contains("temperature outside")) {
+            return OfflineExecutionResult(
+                handled = true,
+                spokenResponse = "Live weather forecasts require an internet connection. Please connect to Wi-Fi or mobile data, or ask me again once online.",
+                actionTaken = "WEATHER_OFFLINE"
+            )
+        }
+
+        // 12. System Navigation
         if (lower == "go home" || lower == "take me home" || lower == "home" || lower == "home screen") {
             IntentManager.executeActionSync(context, "GO_HOME")
             return OfflineExecutionResult(
@@ -224,8 +276,8 @@ object OfflineActionHandler {
             )
         }
 
-        // 4. Settings & System utilities
-        if (lower == "open settings" || lower == "settings") {
+        // 13. Settings & System utilities
+        if (lower == "open settings" || lower == "settings" || lower == "launch settings") {
             val intent = Intent(Settings.ACTION_SETTINGS).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
@@ -237,9 +289,9 @@ object OfflineActionHandler {
             )
         }
 
-        // 5. Flashlight / Torch
+        // 14. Flashlight / Torch
         if (lower.contains("flashlight") || lower.contains("torch")) {
-            val enable = !lower.contains("off") && !lower.contains("stop")
+            val enable = !lower.contains("off") && !lower.contains("stop") && !lower.contains("disable")
             val torchResult = toggleFlashlight(context, enable)
             val reply = if (torchResult) {
                 if (enable) "Flashlight turned on." else "Flashlight turned off."
@@ -253,12 +305,12 @@ object OfflineActionHandler {
             )
         }
 
-        // 6. Volume controls
+        // 15. Volume controls
         if (lower.contains("volume") || lower == "mute") {
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
             if (audioManager != null) {
                 when {
-                    lower.contains("up") || lower.contains("increase") -> {
+                    lower.contains("up") || lower.contains("increase") || lower.contains("raise") -> {
                         audioManager.adjustVolume(AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
                         return OfflineExecutionResult(true, "Volume raised.", "VOLUME_UP")
                     }
@@ -274,8 +326,8 @@ object OfflineActionHandler {
             }
         }
 
-        // 7. Alarms & Timers
-        if (lower.startsWith("set alarm") || lower.startsWith("alarm for")) {
+        // 16. Alarms & Timers
+        if (lower.startsWith("set alarm") || lower.startsWith("alarm for") || lower.startsWith("set an alarm")) {
             val hourMatch = "(\\d{1,2})".toRegex().find(lower)
             val hour = hourMatch?.groupValues?.get(1)?.toIntOrNull()
             if (hour != null && hour in 0..23) {
@@ -294,9 +346,27 @@ object OfflineActionHandler {
             }
         }
 
-        // 8. App Launching ("open chrome", "launch youtube", "open camera")
-        if (lower.startsWith("open ") || lower.startsWith("launch ")) {
-            val appTarget = lower.replace("open ", "").replace("launch ", "").trim()
+        if (lower.startsWith("set timer") || lower.startsWith("timer for")) {
+            val minuteMatch = "(\\d{1,3})\\s*(?:min|minute)".toRegex().find(lower)
+            val minutes = minuteMatch?.groupValues?.get(1)?.toIntOrNull() ?: 5
+            val intent = Intent(AlarmClock.ACTION_SET_TIMER).apply {
+                putExtra(AlarmClock.EXTRA_LENGTH, minutes * 60)
+                putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            tryStartActivity(context, intent)
+            return OfflineExecutionResult(
+                handled = true,
+                spokenResponse = "Timer set for $minutes minutes.",
+                actionTaken = "SET_TIMER"
+            )
+        }
+
+        // 17. App Launching ("open chrome", "launch youtube", "start spotify", "open camera")
+        val appLaunchPrefixes = listOf("open up ", "open ", "launch ", "start ", "run ")
+        val matchedPrefix = appLaunchPrefixes.firstOrNull { lower.startsWith(it) }
+        if (matchedPrefix != null) {
+            val appTarget = lower.removePrefix(matchedPrefix).removePrefix("the ").trim()
 
             // Check hardcoded map first
             val packageName = APP_MAP[appTarget]
@@ -334,27 +404,63 @@ object OfflineActionHandler {
                     actionTaken = "OPEN_APP"
                 )
             }
+
+            // If app was explicitly requested but not found
+            return OfflineExecutionResult(
+                handled = true,
+                spokenResponse = "I couldn't find an app named $appTarget on your device.",
+                actionTaken = "APP_NOT_FOUND"
+            )
         }
 
-        // 9. Phone Calling
-        if (lower.startsWith("call ") || lower.startsWith("dial ")) {
-            val number = raw.replace("call", "", ignoreCase = true)
-                .replace("dial", "", ignoreCase = true)
-                .trim()
-            val intent = Intent(Intent.ACTION_DIAL).apply {
-                data = Uri.parse("tel:$number")
+        // 18. Phone Calling
+        val callPrefixes = listOf("call ", "dial ", "phone ")
+        val matchedCall = callPrefixes.firstOrNull { lower.startsWith(it) }
+        if (matchedCall != null) {
+            val target = normalized.removePrefix(matchedCall).removePrefix("my ").trim()
+            val lookup = ContactsManager.findContactPhoneNumber(context, target)
+            val numberToDial = lookup.phoneNumber ?: target.filter { it.isDigit() || it == '+' }
+
+            if (numberToDial.isNotBlank()) {
+                val intent = Intent(Intent.ACTION_DIAL).apply {
+                    data = Uri.parse("tel:$numberToDial")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                if (tryStartActivity(context, intent)) {
+                    return OfflineExecutionResult(
+                        handled = true,
+                        spokenResponse = lookup.message,
+                        actionTaken = "CALL"
+                    )
+                }
+            } else {
+                return OfflineExecutionResult(
+                    handled = true,
+                    spokenResponse = lookup.message,
+                    actionTaken = "CALL_NOT_FOUND"
+                )
+            }
+        }
+
+        // 19. Web Search ("search for [query]", "google [query]")
+        val searchPrefixes = listOf("search for ", "search the web for ", "search web for ", "search ", "google ")
+        val matchedSearch = searchPrefixes.firstOrNull { lower.startsWith(it) }
+        if (matchedSearch != null) {
+            val searchQuery = normalized.removePrefix(matchedSearch).trim()
+            val intent = Intent(Intent.ACTION_WEB_SEARCH).apply {
+                putExtra(SearchManager.QUERY, searchQuery)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             if (tryStartActivity(context, intent)) {
                 return OfflineExecutionResult(
                     handled = true,
-                    spokenResponse = "Calling $number.",
-                    actionTaken = "CALL"
+                    spokenResponse = "Searching the web for $searchQuery.",
+                    actionTaken = "SEARCH_WEB"
                 )
             }
         }
 
-        // 10. General Offline Fallback Guidance
+        // 20. General Offline Fallback Guidance
         val fallback = "I'm currently running in Offline Mode because there's no internet connection. I can still open your apps, set alarms, toggle settings, navigate your screen, or check your battery. Please connect to the internet for complex conversational answers!"
         return OfflineExecutionResult(
             handled = false,

@@ -33,7 +33,7 @@ import androidx.compose.material.icons.rounded.Hearing
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.QuestionAnswer
 import androidx.compose.material.icons.rounded.Stop
-import androidx.compose.material.icons.rounded.VolumeUp
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -248,7 +248,7 @@ private fun VoiceStateIndicator(voiceState: VoiceState) {
             imageVector = when (voiceState) {
                 is VoiceState.Listening -> Icons.Rounded.Mic
                 is VoiceState.Thinking -> Icons.Rounded.AutoAwesome
-                is VoiceState.Speaking -> Icons.Rounded.VolumeUp
+                is VoiceState.Speaking -> Icons.AutoMirrored.Rounded.VolumeUp
                 is VoiceState.Clarifying -> Icons.Rounded.QuestionAnswer
                 else -> Icons.Rounded.Hearing
             },

@@ -145,7 +145,8 @@ object AppSettingsManager {
             return custom
         }
         return try {
-            BuildConfig.GEMINI_API_KEY
+            val key = BuildConfig.GEMINI_API_KEY.trim()
+            if (key == "DEFAULT_API_KEY" || key == "YOUR_GEMINI_API_KEY" || key == "\"\"") "" else key
         } catch (e: Throwable) {
             ""
         }
@@ -156,6 +157,7 @@ object AppSettingsManager {
     }
 
     fun hasAnyApiKey(): Boolean {
-        return getActiveApiKey().isNotBlank()
+        val key = getActiveApiKey()
+        return key.isNotBlank() && key != "DEFAULT_API_KEY" && key != "YOUR_GEMINI_API_KEY"
     }
 }

@@ -48,7 +48,7 @@ import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Mic
-import androidx.compose.material.icons.rounded.OpenInNew
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Screenshot
@@ -597,7 +597,7 @@ fun SettingsScreen(
                         Text("Get a Free Gemini API Key")
                         Spacer(modifier = Modifier.width(6.dp))
                         Icon(
-                            imageVector = Icons.Rounded.OpenInNew,
+                            imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
                             contentDescription = "Open Google AI Studio",
                             modifier = Modifier.size(16.dp)
                         )
@@ -800,7 +800,7 @@ fun SettingsScreen(
                             .fillMaxWidth()
                             .testTag("configure_accessibility_button")
                     ) {
-                        Icon(imageVector = Icons.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(imageVector = Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(if (isAccessibilityEnabled) "Manage Accessibility Settings" else "Enable in Accessibility Settings")
                     }

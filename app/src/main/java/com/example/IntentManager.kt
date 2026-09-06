@@ -36,13 +36,19 @@ object IntentManager {
                     context.startActivity(intent)
                 }
                 "CALL" -> {
-                    val number = payload ?: throw AssistantException(ErrorCategory.ACTION_FAILED, "Missing phone number.")
-                    val intent = Intent(Intent.ACTION_DIAL).apply {
-                        @Suppress("UseKtx")
-                        data = Uri.parse("tel:$number")
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    val target = payload ?: throw AssistantException(ErrorCategory.ACTION_FAILED, "Missing contact or phone number.")
+                    val lookup = com.example.contact.ContactsManager.findContactPhoneNumber(context, target)
+                    val number = lookup.phoneNumber ?: target.filter { it.isDigit() || it == '+' }
+                    if (number.isNotBlank()) {
+                        val intent = Intent(Intent.ACTION_DIAL).apply {
+                            @Suppress("UseKtx")
+                            data = Uri.parse("tel:$number")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(intent)
+                    } else {
+                        throw AssistantException(ErrorCategory.ACTION_FAILED, lookup.message, canRetry = false)
                     }
-                    context.startActivity(intent)
                 }
                 "OPEN_SETTINGS" -> {
                     val intent = Intent(Settings.ACTION_SETTINGS).apply {
@@ -203,6 +209,33 @@ object IntentManager {
                     if (task != null) {
                         com.example.data.task.TaskManager.setTaskCompleted(task.id, true)
                     }
+                }
+                "SEND_SMS" -> {
+                    val target = payload ?: throw AssistantException(ErrorCategory.ACTION_FAILED, "Missing message details.")
+                    val parts = target.split("|", limit = 2)
+                    val contact = parts.getOrNull(0)?.trim() ?: ""
+                    val message = parts.getOrNull(1)?.trim()
+                    val result = com.example.sms.SmsActionManager.sendSms(context, contact, message)
+                    if (!result.success) {
+                        throw AssistantException(ErrorCategory.ACTION_FAILED, result.spokenMessage)
+                    }
+                }
+                "SET_TIMER" -> {
+                    val minutes = payload?.filter { it.isDigit() }?.toIntOrNull() ?: 5
+                    val intent = Intent(AlarmClock.ACTION_SET_TIMER).apply {
+                        putExtra(AlarmClock.EXTRA_LENGTH, minutes * 60)
+                        putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                }
+                "OPEN_URL" -> {
+                    val rawUrl = payload ?: throw AssistantException(ErrorCategory.ACTION_FAILED, "Missing URL.")
+                    val validUrl = if (!rawUrl.startsWith("http://") && !rawUrl.startsWith("https://")) "https://$rawUrl" else rawUrl
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(validUrl)).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
                 }
                 else -> {
                     throw AssistantException(ErrorCategory.UNSUPPORTED_ACTION, "Unknown action: $action")
