@@ -36,7 +36,9 @@ data class ChatMessage(
     val visionTaskLabel: String? = null,
     val isMemoryAction: Boolean = false,
     val isSensitiveWarning: Boolean = false,
-    val isOfflineAction: Boolean = false
+    val isOfflineAction: Boolean = false,
+    val callOptions: List<com.example.contact.CallContactOption>? = null,
+    val musicAction: com.example.music.MusicActionInfo? = null
 )
 
 enum class MessageSender {
@@ -85,6 +87,291 @@ class ChatViewModel : ViewModel() {
 
     private val _audioRmsLevel = MutableStateFlow(0f)
     val audioRmsLevel: StateFlow<Float> = _audioRmsLevel.asStateFlow()
+
+    // Call Action & Contact Disambiguation State
+    private val _callDisambiguation = MutableStateFlow<com.example.contact.CallDisambiguation?>(null)
+    val callDisambiguation: StateFlow<com.example.contact.CallDisambiguation?> = _callDisambiguation.asStateFlow()
+
+    private val _pendingCallOption = MutableStateFlow<com.example.contact.CallContactOption?>(null)
+    val pendingCallOption: StateFlow<com.example.contact.CallContactOption?> = _pendingCallOption.asStateFlow()
+
+    private val _pendingContactQuery = MutableStateFlow<String?>(null)
+
+    private val _requestCallPermissionEvent = MutableStateFlow(false)
+    val requestCallPermissionEvent: StateFlow<Boolean> = _requestCallPermissionEvent.asStateFlow()
+
+    private val _requestContactsPermissionEvent = MutableStateFlow(false)
+    val requestContactsPermissionEvent: StateFlow<Boolean> = _requestContactsPermissionEvent.asStateFlow()
+
+    fun consumeCallPermissionEvent() {
+        _requestCallPermissionEvent.value = false
+    }
+
+    fun consumeContactsPermissionEvent() {
+        _requestContactsPermissionEvent.value = false
+    }
+
+    fun onCallPermissionGranted(context: Context) {
+        val pending = _pendingCallOption.value
+        _pendingCallOption.value = null
+        if (pending != null) {
+            val result = com.example.contact.CallActionManager.executeCall(context, pending.displayName, pending.phoneNumber)
+            if (result is com.example.contact.CallExecutionResult.Failed) {
+                val errorMsg = "Could not place call: ${result.reason}"
+                _messages.value = _messages.value + ChatMessage(sender = MessageSender.AI, text = errorMsg)
+                voiceManager?.speak(errorMsg)
+            }
+        }
+    }
+
+    fun onCallPermissionDenied(context: Context) {
+        val pending = _pendingCallOption.value
+        _pendingCallOption.value = null
+        if (pending != null) {
+            val msg = "Call permission was not granted. Opening phone dialer for ${pending.displayName}."
+            _messages.value = _messages.value + ChatMessage(sender = MessageSender.AI, text = msg)
+            voiceManager?.speak(msg)
+            com.example.contact.CallActionManager.openDialerFallback(context, pending.phoneNumber)
+        }
+    }
+
+    fun onContactsPermissionGranted(context: Context) {
+        val query = _pendingContactQuery.value
+        _pendingContactQuery.value = null
+        if (!query.isNullOrBlank()) {
+            handleDirectCallCommand(context, query)
+        }
+    }
+
+    fun selectCallOption(option: com.example.contact.CallContactOption, context: Context) {
+        _callDisambiguation.value = null
+        placeCallToResolvedOption(context, option)
+    }
+
+    fun dismissCallDisambiguation() {
+        _callDisambiguation.value = null
+    }
+
+    fun handleDirectCallCommand(context: Context, rawTarget: String) {
+        val target = rawTarget.trim()
+        if (target.isEmpty()) {
+            val prompt = "Who would you like me to call?"
+            _messages.value = _messages.value + ChatMessage(
+                sender = MessageSender.AI,
+                text = prompt
+            )
+            voiceManager?.speak(prompt)
+            return
+        }
+
+        // Direct numeric phone number check
+        val digitsOnly = target.filter { it.isDigit() || it == '+' }
+        if (digitsOnly.length >= 3 && target.all { it.isDigit() || it == '+' || it == '-' || it == ' ' || it == '(' || it == ')' }) {
+            placeCallToResolvedOption(
+                context,
+                com.example.contact.CallContactOption(
+                    displayName = target,
+                    phoneNumber = digitsOnly,
+                    typeLabel = "Direct"
+                )
+            )
+            return
+        }
+
+        // Check contacts permission
+        if (!com.example.contact.ContactsManager.hasContactsPermission(context)) {
+            _pendingContactQuery.value = target
+            _requestContactsPermissionEvent.value = true
+            val msg = "Contact permission is needed to look up $target in your contacts."
+            _messages.value = _messages.value + ChatMessage(
+                sender = MessageSender.AI,
+                text = msg
+            )
+            voiceManager?.speak(msg)
+            return
+        }
+
+        when (val outcome = com.example.contact.ContactsManager.lookupContact(context, target)) {
+            is com.example.contact.ContactLookupOutcome.SingleMatch -> {
+                val option = com.example.contact.CallContactOption(
+                    displayName = outcome.entry.displayName,
+                    phoneNumber = outcome.entry.phoneNumber,
+                    typeLabel = outcome.entry.typeLabel
+                )
+                placeCallToResolvedOption(context, option)
+            }
+            is com.example.contact.ContactLookupOutcome.DirectNumber -> {
+                val option = com.example.contact.CallContactOption(
+                    displayName = outcome.phoneNumber,
+                    phoneNumber = outcome.phoneNumber,
+                    typeLabel = "Direct"
+                )
+                placeCallToResolvedOption(context, option)
+            }
+            is com.example.contact.ContactLookupOutcome.MultipleContacts -> {
+                val options = outcome.contacts.map {
+                    com.example.contact.CallContactOption(
+                        displayName = it.displayName,
+                        phoneNumber = it.phoneNumber,
+                        typeLabel = it.typeLabel
+                    )
+                }
+                val promptText = "I found multiple contacts named $target. Which one should I call?"
+                val disambiguation = com.example.contact.CallDisambiguation(
+                    title = "Multiple Contacts Found",
+                    prompt = promptText,
+                    options = options
+                )
+                _callDisambiguation.value = disambiguation
+                _messages.value = _messages.value + ChatMessage(
+                    sender = MessageSender.AI,
+                    text = promptText,
+                    callOptions = options
+                )
+                voiceManager?.speak(promptText)
+            }
+            is com.example.contact.ContactLookupOutcome.MultipleNumbersForContact -> {
+                val options = outcome.numbers.map {
+                    com.example.contact.CallContactOption(
+                        displayName = it.displayName,
+                        phoneNumber = it.phoneNumber,
+                        typeLabel = it.typeLabel
+                    )
+                }
+                val distinctLabels = outcome.numbers.map { it.typeLabel.lowercase() }.distinct()
+                val labelsSpoken = if (distinctLabels.size == 2) {
+                    "${distinctLabels[0]} or ${distinctLabels[1]}"
+                } else {
+                    distinctLabels.joinToString(", or ")
+                }
+                val promptText = "Which number should I call: $labelsSpoken?"
+                val disambiguation = com.example.contact.CallDisambiguation(
+                    title = "Select Phone Number",
+                    prompt = promptText,
+                    options = options
+                )
+                _callDisambiguation.value = disambiguation
+                _messages.value = _messages.value + ChatMessage(
+                    sender = MessageSender.AI,
+                    text = promptText,
+                    callOptions = options
+                )
+                voiceManager?.speak(promptText)
+            }
+            is com.example.contact.ContactLookupOutcome.ContactHasNoNumber -> {
+                val msg = "That contact doesn't have a phone number."
+                _messages.value = _messages.value + ChatMessage(
+                    sender = MessageSender.AI,
+                    text = msg
+                )
+                voiceManager?.speak(msg)
+            }
+            is com.example.contact.ContactLookupOutcome.NotFound -> {
+                val msg = "I couldn't find that contact."
+                _messages.value = _messages.value + ChatMessage(
+                    sender = MessageSender.AI,
+                    text = msg
+                )
+                voiceManager?.speak(msg)
+            }
+            is com.example.contact.ContactLookupOutcome.PermissionRequired -> {
+                _pendingContactQuery.value = target
+                _requestContactsPermissionEvent.value = true
+                _messages.value = _messages.value + ChatMessage(
+                    sender = MessageSender.AI,
+                    text = outcome.message
+                )
+                voiceManager?.speak(outcome.message)
+            }
+            is com.example.contact.ContactLookupOutcome.Error -> {
+                _messages.value = _messages.value + ChatMessage(
+                    sender = MessageSender.AI,
+                    text = outcome.message
+                )
+                voiceManager?.speak(outcome.message)
+            }
+        }
+    }
+
+    fun placeCallToResolvedOption(context: Context, option: com.example.contact.CallContactOption) {
+        val speech = "Calling ${option.displayName}."
+        _messages.value = _messages.value + ChatMessage(
+            sender = MessageSender.AI,
+            text = speech
+        )
+        voiceManager?.speak(speech)
+
+        if (com.example.contact.CallActionManager.hasCallPermission(context)) {
+            val result = com.example.contact.CallActionManager.executeCall(context, option.displayName, option.phoneNumber)
+            when (result) {
+                is com.example.contact.CallExecutionResult.Started -> {
+                    AssistantLogger.i("ChatViewModel", "Call placed to ${option.displayName}")
+                }
+                is com.example.contact.CallExecutionResult.DialerOpened -> {
+                    AssistantLogger.w("ChatViewModel", "Dialer fallback used: ${result.reason}")
+                }
+                is com.example.contact.CallExecutionResult.Failed -> {
+                    val errorMsg = "Could not place call: ${result.reason}"
+                    _messages.value = _messages.value + ChatMessage(sender = MessageSender.AI, text = errorMsg)
+                    voiceManager?.speak(errorMsg)
+                }
+                is com.example.contact.CallExecutionResult.PermissionRequired -> {
+                    _pendingCallOption.value = option
+                    _requestCallPermissionEvent.value = true
+                }
+            }
+        } else {
+            _pendingCallOption.value = option
+            _requestCallPermissionEvent.value = true
+        }
+    }
+
+    /**
+     * Executes a music playback / search command locally with zero AI latency.
+     */
+    fun handleDirectMusicCommand(context: Context, command: com.example.music.MusicCommand) {
+        AssistantLogger.i("ChatViewModel", "Executing direct music command: song='${command.song}', artist='${command.artist}', platform=${command.platform}")
+        val result = com.example.music.MusicActionManager.executeMusicCommand(context, command)
+        when (result) {
+            is com.example.music.MusicExecutionResult.Success -> {
+                val musicInfo = com.example.music.MusicActionInfo(
+                    song = result.song,
+                    artist = result.artist,
+                    platform = result.platform,
+                    isInstalled = result.isInstalledApp,
+                    webFallback = result.webFallback
+                )
+                _messages.value = _messages.value + ChatMessage(
+                    sender = MessageSender.AI,
+                    text = result.spokenResponse,
+                    musicAction = musicInfo
+                )
+                voiceManager?.speak(result.spokenResponse)
+            }
+            is com.example.music.MusicExecutionResult.NeedsSongPrompt -> {
+                _messages.value = _messages.value + ChatMessage(
+                    sender = MessageSender.AI,
+                    text = result.spokenResponse
+                )
+                voiceManager?.speak(result.spokenResponse)
+            }
+            is com.example.music.MusicExecutionResult.Error -> {
+                _messages.value = _messages.value + ChatMessage(
+                    sender = MessageSender.AI,
+                    text = result.spokenResponse
+                )
+                voiceManager?.speak(result.spokenResponse)
+            }
+        }
+    }
+
+    /**
+     * Re-opens or switches a song to a specific platform (e.g. from the chat action buttons).
+     */
+    fun playMusicOnPlatform(context: Context, song: String, artist: String?, platform: com.example.music.MusicPlatform) {
+        val cmd = com.example.music.MusicCommand(song = song, artist = artist, platform = platform)
+        handleDirectMusicCommand(context, cmd)
+    }
 
     private val _tasks = MutableStateFlow<List<TaskItem>>(emptyList())
     val tasks: StateFlow<List<TaskItem>> = _tasks.asStateFlow()
@@ -240,6 +527,52 @@ class ChatViewModel : ViewModel() {
             isSpoken = isSpokenInput
         )
         _messages.value = _messages.value + userMessage
+
+        // =========================================================================
+        // ACTIVE CALL DISAMBIGUATION RESPONSE (Select by Contact Name or Phone Type)
+        // =========================================================================
+        val currentDisambiguation = _callDisambiguation.value
+        if (currentDisambiguation != null) {
+            val lower = trimmed.lowercase().trim()
+            if (lower == "cancel" || lower == "stop" || lower == "nevermind" || lower == "dismiss" || lower == "no") {
+                _callDisambiguation.value = null
+                val reply = "Call cancelled."
+                _messages.value = _messages.value + ChatMessage(sender = MessageSender.AI, text = reply)
+                voiceManager?.speak(reply)
+                return
+            }
+
+            val matchedOption = currentDisambiguation.options.firstOrNull { opt ->
+                lower == opt.displayName.lowercase() ||
+                lower == opt.typeLabel.lowercase() ||
+                lower.contains(opt.typeLabel.lowercase()) ||
+                lower.contains(opt.displayName.lowercase()) ||
+                opt.displayName.lowercase().contains(lower)
+            }
+            if (matchedOption != null) {
+                _callDisambiguation.value = null
+                placeCallToResolvedOption(context, matchedOption)
+                return
+            }
+        }
+
+        // =========================================================================
+        // FAST DIRECT PHONE CALL INTENT (Deterministic, Local, Zero AI Latency)
+        // =========================================================================
+        val callTarget = com.example.contact.CallActionManager.parseCallCommand(trimmed)
+        if (callTarget != null) {
+            handleDirectCallCommand(context, callTarget)
+            return
+        }
+
+        // =========================================================================
+        // FAST DIRECT MUSIC / SONG PLAY INTENT (Deterministic, Local, Zero AI Latency)
+        // =========================================================================
+        val musicCommand = com.example.music.MusicActionManager.parseMusicCommand(trimmed)
+        if (musicCommand != null) {
+            handleDirectMusicCommand(context, musicCommand)
+            return
+        }
 
         // =========================================================================
         // FAST DIRECT MEMORY CONTROLS (Zero network latency, 100% reliable)

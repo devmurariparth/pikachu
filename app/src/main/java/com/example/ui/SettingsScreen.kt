@@ -48,6 +48,7 @@ import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.QrCodeScanner
@@ -69,6 +70,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -99,6 +101,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.AppSettingsManager
+import com.example.data.DefaultMusicApp
 import com.example.data.ThemePreference
 import com.example.data.UserMemoryManager
 import com.example.repository.ConnectionManager
@@ -131,6 +134,8 @@ fun SettingsScreen(
     val isMemoryEnabled by UserMemoryManager.isMemoryEnabled.collectAsState()
     val memories by UserMemoryManager.memories.collectAsState()
     var showMemoryDialog by remember { mutableStateOf(false) }
+
+    val defaultMusicApp by AppSettingsManager.defaultMusicApp.collectAsState()
 
     val batteryLevel by com.example.data.BatteryOptimizationManager.batteryLevel.collectAsState()
     val isCharging by com.example.data.BatteryOptimizationManager.isCharging.collectAsState()
@@ -742,6 +747,96 @@ fun SettingsScreen(
                             onCheckedChange = { AppSettingsManager.setAutoLanguageEnabled(it) },
                             modifier = Modifier.testTag("auto_language_switch")
                         )
+                    }
+                }
+            }
+
+            // ==========================================
+            // SECTION 3.5: DEFAULT MUSIC PLAYER
+            // ==========================================
+            Card(
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("music_settings_card")
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Rounded.MusicNote,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "Default Music Player",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Choose player for voice commands like 'Play [song]'",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        DefaultMusicApp.values().forEach { appOption ->
+                            val isSelected = defaultMusicApp == appOption
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                                border = if (isSelected) androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { AppSettingsManager.setDefaultMusicApp(appOption) }
+                                    .testTag("music_pref_${appOption.name}")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = when (appOption) {
+                                                DefaultMusicApp.AUTO -> "Auto Detect"
+                                                DefaultMusicApp.SPOTIFY -> "Spotify"
+                                                DefaultMusicApp.YOUTUBE_MUSIC -> "YouTube Music"
+                                                DefaultMusicApp.YOUTUBE -> "YouTube"
+                                            },
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = when (appOption) {
+                                                DefaultMusicApp.AUTO -> "Uses Spotify if installed, else YouTube Music or YouTube"
+                                                DefaultMusicApp.SPOTIFY -> "Direct MediaStore playback intent with web fallback"
+                                                DefaultMusicApp.YOUTUBE_MUSIC -> "Direct YouTube Music search and playback"
+                                                DefaultMusicApp.YOUTUBE -> "Native YouTube video playback or search"
+                                            },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    RadioButton(
+                                        selected = isSelected,
+                                        onClick = { AppSettingsManager.setDefaultMusicApp(appOption) }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

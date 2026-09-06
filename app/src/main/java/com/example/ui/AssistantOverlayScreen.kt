@@ -46,6 +46,9 @@ import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DocumentScanner
 import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.Phone
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Screenshot
@@ -55,6 +58,7 @@ import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -239,6 +243,47 @@ fun AssistantOverlayScreen(
             coroutineScope.launch {
                 snackbarHostState.showSnackbar("Enable MJ Assistant in Accessibility settings to capture on-screen content.")
             }
+        }
+    }
+
+    // Call Action & Contact Permissions
+    val requestCallPermissionEvent by viewModel.requestCallPermissionEvent.collectAsState()
+    val requestContactsPermissionEvent by viewModel.requestContactsPermissionEvent.collectAsState()
+    val callDisambiguation by viewModel.callDisambiguation.collectAsState()
+
+    val callPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            viewModel.onCallPermissionGranted(context)
+        } else {
+            viewModel.onCallPermissionDenied(context)
+        }
+    }
+
+    val readContactsPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            viewModel.onContactsPermissionGranted(context)
+        } else {
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar("Contacts permission is required to search contacts.")
+            }
+        }
+    }
+
+    LaunchedEffect(requestCallPermissionEvent) {
+        if (requestCallPermissionEvent) {
+            viewModel.consumeCallPermissionEvent()
+            callPermissionLauncher.launch(Manifest.permission.CALL_PHONE)
+        }
+    }
+
+    LaunchedEffect(requestContactsPermissionEvent) {
+        if (requestContactsPermissionEvent) {
+            viewModel.consumeContactsPermissionEvent()
+            readContactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
         }
     }
 
@@ -567,7 +612,16 @@ fun AssistantOverlayScreen(
                 }
 
                 items(messages, key = { it.id }) { message ->
-                    PremiumChatMessageItem(message = message, isDark = isDark)
+                    PremiumChatMessageItem(
+                        message = message,
+                        isDark = isDark,
+                        onCallOptionClick = { option ->
+                            viewModel.selectCallOption(option, context)
+                        },
+                        onPlayOnPlatform = { song, artist, platform ->
+                            viewModel.playMusicOnPlatform(context, song, artist, platform)
+                        }
+                    )
                 }
 
                 if (isProcessing) {
@@ -938,6 +992,91 @@ fun AssistantOverlayScreen(
                 }
             )
         }
+
+        callDisambiguation?.let { disambiguation ->
+            ModalBottomSheet(
+                onDismissRequest = { viewModel.dismissCallDisambiguation() },
+                containerColor = if (isDark) Color(0xFF0F172A) else Color(0xFFFFFFFF)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 16.dp)
+                        .navigationBarsPadding()
+                ) {
+                    Text(
+                        text = disambiguation.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isDark) Color.White else Color(0xFF0F172A)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = disambiguation.prompt,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        disambiguation.options.forEach { opt ->
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (isDark) Color(0xFF1E293B) else Color(0xFFF8FAFC),
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp,
+                                    if (isDark) Color(0x3338BDF8) else Color(0x224F46E5)
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { viewModel.selectCallOption(opt, context) }
+                                    .testTag("disambiguation_sheet_item_${opt.displayName}")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(if (isDark) Color(0x3310B981) else Color(0x1910B981)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Phone,
+                                            contentDescription = null,
+                                            tint = if (isDark) Color(0xFF34D399) else Color(0xFF059669),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = opt.displayName,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (isDark) Color.White else Color(0xFF0F172A)
+                                        )
+                                        Text(
+                                            text = opt.typeLabel,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B)
+                                        )
+                                    }
+                                    Text(
+                                        text = "Call",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isDark) Color(0xFF38BDF8) else Color(0xFF4F46E5)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
+        }
     }
 }
 
@@ -948,7 +1087,9 @@ fun AssistantOverlayScreen(
 fun PremiumChatMessageItem(
     message: ChatMessage,
     isDark: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onCallOptionClick: (com.example.contact.CallContactOption) -> Unit = {},
+    onPlayOnPlatform: (song: String, artist: String?, platform: com.example.music.MusicPlatform) -> Unit = { _, _, _ -> }
 ) {
     val isUser = message.sender == MessageSender.USER
 
@@ -1099,6 +1240,201 @@ fun PremiumChatMessageItem(
                         if (isDark) Color(0xFFF1F5F9) else Color(0xFF0F172A)
                     }
                 )
+
+                if (!message.callOptions.isNullOrEmpty()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        message.callOptions.forEach { opt ->
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isDark) Color(0xFF1E293B) else Color(0xFFF1F5F9),
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp,
+                                    if (isDark) Color(0x4438BDF8) else Color(0x334F46E5)
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onCallOptionClick(opt) }
+                                    .testTag("call_option_${opt.displayName}")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(30.dp)
+                                            .clip(CircleShape)
+                                            .background(if (isDark) Color(0x3310B981) else Color(0x1910B981)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Phone,
+                                            contentDescription = "Call ${opt.displayName}",
+                                            tint = if (isDark) Color(0xFF34D399) else Color(0xFF059669),
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = opt.displayName,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (isDark) Color.White else Color(0xFF0F172A)
+                                        )
+                                        Text(
+                                            text = opt.typeLabel,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B)
+                                        )
+                                    }
+                                    Text(
+                                        text = "Call",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isDark) Color(0xFF38BDF8) else Color(0xFF4F46E5)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (message.musicAction != null) {
+                    val music = message.musicAction
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isDark) Color(0xFF1E293B) else Color(0xFFF8FAFC),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (isDark) Color(0x33A855F7) else Color(0x229333EA)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("music_action_card")
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            when (music.platform) {
+                                                com.example.music.MusicPlatform.SPOTIFY -> Color(0xFF1DB954).copy(alpha = 0.2f)
+                                                com.example.music.MusicPlatform.YOUTUBE -> Color(0xFFFF0000).copy(alpha = 0.2f)
+                                                com.example.music.MusicPlatform.YOUTUBE_MUSIC -> Color(0xFFFF0000).copy(alpha = 0.2f)
+                                                else -> Color(0xFF8B5CF6).copy(alpha = 0.2f)
+                                            }
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.MusicNote,
+                                        contentDescription = "Music",
+                                        tint = when (music.platform) {
+                                            com.example.music.MusicPlatform.SPOTIFY -> Color(0xFF1DB954)
+                                            com.example.music.MusicPlatform.YOUTUBE, com.example.music.MusicPlatform.YOUTUBE_MUSIC -> Color(0xFFEF4444)
+                                            else -> Color(0xFF8B5CF6)
+                                        },
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = music.song,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isDark) Color.White else Color(0xFF0F172A)
+                                    )
+                                    if (!music.artist.isNullOrBlank()) {
+                                        Text(
+                                            text = music.artist,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B)
+                                        )
+                                    }
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0)
+                                ) {
+                                    Text(
+                                        text = music.platform.displayName,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = when (music.platform) {
+                                            com.example.music.MusicPlatform.SPOTIFY -> Color(0xFF1DB954)
+                                            com.example.music.MusicPlatform.YOUTUBE, com.example.music.MusicPlatform.YOUTUBE_MUSIC -> Color(0xFFEF4444)
+                                            else -> MaterialTheme.colorScheme.primary
+                                        },
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+
+                            // Quick platform switch chips
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                if (music.platform != com.example.music.MusicPlatform.SPOTIFY) {
+                                    AssistChip(
+                                        onClick = { onPlayOnPlatform(music.song, music.artist, com.example.music.MusicPlatform.SPOTIFY) },
+                                        label = { Text("Spotify", style = MaterialTheme.typography.labelSmall) },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Rounded.PlayArrow,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        },
+                                        modifier = Modifier.testTag("music_switch_spotify")
+                                    )
+                                }
+                                if (music.platform != com.example.music.MusicPlatform.YOUTUBE) {
+                                    AssistChip(
+                                        onClick = { onPlayOnPlatform(music.song, music.artist, com.example.music.MusicPlatform.YOUTUBE) },
+                                        label = { Text("YouTube", style = MaterialTheme.typography.labelSmall) },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Rounded.PlayArrow,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        },
+                                        modifier = Modifier.testTag("music_switch_youtube")
+                                    )
+                                }
+                                if (music.platform != com.example.music.MusicPlatform.YOUTUBE_MUSIC) {
+                                    AssistChip(
+                                        onClick = { onPlayOnPlatform(music.song, music.artist, com.example.music.MusicPlatform.YOUTUBE_MUSIC) },
+                                        label = { Text("YT Music", style = MaterialTheme.typography.labelSmall) },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Rounded.PlayArrow,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        },
+                                        modifier = Modifier.testTag("music_switch_ytm")
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
 
                 if (!isUser && (message.isSpoken || message.language.isNotBlank())) {
                     Spacer(modifier = Modifier.height(4.dp))

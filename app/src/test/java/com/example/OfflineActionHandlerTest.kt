@@ -127,6 +127,22 @@ class OfflineActionHandlerTest {
     }
 
     @Test
+    fun testCallDirectNumberOffline() = runTest {
+        val result = OfflineActionHandler.handleOfflineCommand(context, "Call 9876543210")
+        assertTrue(result.handled)
+        assertEquals("CALL", result.actionTaken)
+        assertTrue(result.spokenResponse.contains("9876543210"))
+    }
+
+    @Test
+    fun testCallPromptOfflineWhenNoTarget() = runTest {
+        val result = OfflineActionHandler.handleOfflineCommand(context, "Call")
+        assertTrue(result.handled)
+        assertEquals("CALL_PROMPT", result.actionTaken)
+        assertTrue(result.spokenResponse.contains("Who would you like me to call"))
+    }
+
+    @Test
     fun testUnhandledComplexQueryOffline() = runTest {
         val result = OfflineActionHandler.handleOfflineCommand(context, "explain quantum physics to me in simple terms")
         assertFalse(result.handled)

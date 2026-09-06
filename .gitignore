@@ -15,6 +15,9 @@
 local.properties
 /app/build
 
+# Gradle Wrapper
+!gradle/wrapper/gradle-wrapper.jar
+
 # Signing credentials — never commit to public repos
 *.keystore
 *.jks

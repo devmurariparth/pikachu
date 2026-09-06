@@ -14,6 +14,13 @@ enum class ThemePreference {
     DARK
 }
 
+enum class DefaultMusicApp(val label: String) {
+    AUTO("Auto (Spotify > YouTube Music > YouTube)"),
+    SPOTIFY("Spotify"),
+    YOUTUBE_MUSIC("YouTube Music"),
+    YOUTUBE("YouTube")
+}
+
 object AppSettingsManager {
     private const val PREFS_NAME = "mj_assistant_settings"
     private const val KEY_THEME_MODE = "theme_mode"
@@ -23,11 +30,15 @@ object AppSettingsManager {
     private const val KEY_WAKE_WORD_ENABLED = "wake_word_enabled"
     private const val KEY_TTS_ENABLED = "tts_enabled"
     private const val KEY_AUTO_LANGUAGE_ENABLED = "auto_language_enabled"
+    private const val KEY_DEFAULT_MUSIC_APP = "default_music_app"
 
     private lateinit var prefs: SharedPreferences
 
     private val _themePreference = MutableStateFlow(ThemePreference.SYSTEM)
     val themePreference: StateFlow<ThemePreference> = _themePreference.asStateFlow()
+
+    private val _defaultMusicApp = MutableStateFlow(DefaultMusicApp.AUTO)
+    val defaultMusicApp: StateFlow<DefaultMusicApp> = _defaultMusicApp.asStateFlow()
 
     private val _isDynamicColor = MutableStateFlow(true)
     val isDynamicColor: StateFlow<Boolean> = _isDynamicColor.asStateFlow()
@@ -68,6 +79,21 @@ object AppSettingsManager {
         _isWakeWordEnabled.value = prefs.getBoolean(KEY_WAKE_WORD_ENABLED, true)
         _isTtsEnabled.value = prefs.getBoolean(KEY_TTS_ENABLED, true)
         _isAutoLanguageEnabled.value = prefs.getBoolean(KEY_AUTO_LANGUAGE_ENABLED, true)
+
+        val savedMusicApp = prefs.getString(KEY_DEFAULT_MUSIC_APP, DefaultMusicApp.AUTO.name) ?: DefaultMusicApp.AUTO.name
+        _defaultMusicApp.value = try {
+            DefaultMusicApp.valueOf(savedMusicApp)
+        } catch (e: Exception) {
+            DefaultMusicApp.AUTO
+        }
+    }
+
+    fun setDefaultMusicApp(app: DefaultMusicApp) {
+        _defaultMusicApp.value = app
+        if (::prefs.isInitialized) {
+            prefs.edit().putString(KEY_DEFAULT_MUSIC_APP, app.name).apply()
+            AssistantLogger.i("Settings", "Default music app set to ${app.name}")
+        }
     }
 
     fun setContinuousConversation(enabled: Boolean) {

@@ -81,6 +81,36 @@ object OfflineActionHandler {
         val lower = normalized.lowercase()
         AssistantLogger.i(TAG, "Processing offline query: raw='$raw', normalized='$normalized'")
 
+        // 0. Direct Music Command ("play believer", "play shape of you on spotify", "listen to believer")
+        val musicCommand = com.example.music.MusicActionManager.parseMusicCommand(normalized)
+            ?: com.example.music.MusicActionManager.parseMusicCommand(raw)
+        if (musicCommand != null) {
+            val res = com.example.music.MusicActionManager.executeMusicCommand(context, musicCommand)
+            return when (res) {
+                is com.example.music.MusicExecutionResult.Success -> {
+                    OfflineExecutionResult(
+                        handled = true,
+                        spokenResponse = res.spokenResponse,
+                        actionTaken = res.actionTaken
+                    )
+                }
+                is com.example.music.MusicExecutionResult.NeedsSongPrompt -> {
+                    OfflineExecutionResult(
+                        handled = true,
+                        spokenResponse = res.spokenResponse,
+                        actionTaken = "MUSIC_PROMPT"
+                    )
+                }
+                is com.example.music.MusicExecutionResult.Error -> {
+                    OfflineExecutionResult(
+                        handled = true,
+                        spokenResponse = res.spokenResponse,
+                        actionTaken = "MUSIC_ERROR"
+                    )
+                }
+            }
+        }
+
         // 1. WhatsApp Voice Command ("Send a WhatsApp to [contact]")
         val whatsAppMatch = WhatsAppManager.parseWhatsAppVoiceCommand(normalized)
             ?: WhatsAppManager.parseWhatsAppVoiceCommand(raw)
@@ -414,31 +444,75 @@ object OfflineActionHandler {
         }
 
         // 18. Phone Calling
-        val callPrefixes = listOf("call ", "dial ", "phone ")
-        val matchedCall = callPrefixes.firstOrNull { lower.startsWith(it) }
-        if (matchedCall != null) {
-            val target = normalized.removePrefix(matchedCall).removePrefix("my ").trim()
-            val lookup = ContactsManager.findContactPhoneNumber(context, target)
-            val numberToDial = lookup.phoneNumber ?: target.filter { it.isDigit() || it == '+' }
-
-            if (numberToDial.isNotBlank()) {
-                val intent = Intent(Intent.ACTION_DIAL).apply {
-                    data = Uri.parse("tel:$numberToDial")
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                if (tryStartActivity(context, intent)) {
+        val callTarget = com.example.contact.CallActionManager.parseCallCommand(normalized)
+        if (callTarget != null) {
+            if (callTarget.isBlank()) {
+                return OfflineExecutionResult(
+                    handled = true,
+                    spokenResponse = "Who would you like me to call?",
+                    actionTaken = "CALL_PROMPT"
+                )
+            }
+            when (val outcome = ContactsManager.lookupContact(context, callTarget)) {
+                is com.example.contact.ContactLookupOutcome.SingleMatch -> {
+                    com.example.contact.CallActionManager.executeCall(context, outcome.entry.displayName, outcome.entry.phoneNumber)
                     return OfflineExecutionResult(
                         handled = true,
-                        spokenResponse = lookup.message,
+                        spokenResponse = "Calling ${outcome.entry.displayName}.",
                         actionTaken = "CALL"
                     )
                 }
-            } else {
-                return OfflineExecutionResult(
-                    handled = true,
-                    spokenResponse = lookup.message,
-                    actionTaken = "CALL_NOT_FOUND"
-                )
+                is com.example.contact.ContactLookupOutcome.DirectNumber -> {
+                    com.example.contact.CallActionManager.executeCall(context, outcome.phoneNumber, outcome.phoneNumber)
+                    return OfflineExecutionResult(
+                        handled = true,
+                        spokenResponse = "Calling ${outcome.phoneNumber}.",
+                        actionTaken = "CALL"
+                    )
+                }
+                is com.example.contact.ContactLookupOutcome.ContactHasNoNumber -> {
+                    return OfflineExecutionResult(
+                        handled = true,
+                        spokenResponse = "That contact doesn't have a phone number.",
+                        actionTaken = "CALL_NO_NUMBER"
+                    )
+                }
+                is com.example.contact.ContactLookupOutcome.NotFound -> {
+                    return OfflineExecutionResult(
+                        handled = true,
+                        spokenResponse = "I couldn't find that contact.",
+                        actionTaken = "CALL_NOT_FOUND"
+                    )
+                }
+                is com.example.contact.ContactLookupOutcome.MultipleContacts -> {
+                    return OfflineExecutionResult(
+                        handled = true,
+                        spokenResponse = "I found multiple contacts named $callTarget. Which one should I call?",
+                        actionTaken = "CALL_AMBIGUOUS"
+                    )
+                }
+                is com.example.contact.ContactLookupOutcome.MultipleNumbersForContact -> {
+                    val labels = outcome.numbers.map { it.typeLabel.lowercase() }.distinct().joinToString(", or ")
+                    return OfflineExecutionResult(
+                        handled = true,
+                        spokenResponse = "Which number should I call: $labels?",
+                        actionTaken = "CALL_MULTIPLE_NUMBERS"
+                    )
+                }
+                is com.example.contact.ContactLookupOutcome.PermissionRequired -> {
+                    return OfflineExecutionResult(
+                        handled = true,
+                        spokenResponse = outcome.message,
+                        actionTaken = "CALL_PERMISSION_REQUIRED"
+                    )
+                }
+                is com.example.contact.ContactLookupOutcome.Error -> {
+                    return OfflineExecutionResult(
+                        handled = true,
+                        spokenResponse = outcome.message,
+                        actionTaken = "CALL_ERROR"
+                    )
+                }
             }
         }
 

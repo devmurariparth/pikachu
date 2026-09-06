@@ -35,19 +35,49 @@ object IntentManager {
                     }
                     context.startActivity(intent)
                 }
+                "PLAY_MUSIC", "OPEN_MUSIC" -> {
+                    val query = payload ?: throw AssistantException(ErrorCategory.ACTION_FAILED, "Missing song title.")
+                    val command = com.example.music.MusicActionManager.parseMusicCommand("play $query")
+                        ?: com.example.music.MusicCommand(song = query)
+                    val result = com.example.music.MusicActionManager.executeMusicCommand(context, command)
+                    if (result is com.example.music.MusicExecutionResult.Error) {
+                        throw AssistantException(ErrorCategory.ACTION_FAILED, result.spokenResponse)
+                    }
+                }
                 "CALL" -> {
                     val target = payload ?: throw AssistantException(ErrorCategory.ACTION_FAILED, "Missing contact or phone number.")
-                    val lookup = com.example.contact.ContactsManager.findContactPhoneNumber(context, target)
-                    val number = lookup.phoneNumber ?: target.filter { it.isDigit() || it == '+' }
-                    if (number.isNotBlank()) {
-                        val intent = Intent(Intent.ACTION_DIAL).apply {
-                            @Suppress("UseKtx")
-                            data = Uri.parse("tel:$number")
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    when (val outcome = com.example.contact.ContactsManager.lookupContact(context, target)) {
+                        is com.example.contact.ContactLookupOutcome.SingleMatch -> {
+                            val res = com.example.contact.CallActionManager.executeCall(context, outcome.entry.displayName, outcome.entry.phoneNumber)
+                            if (res is com.example.contact.CallExecutionResult.Failed) {
+                                throw AssistantException(ErrorCategory.ACTION_FAILED, res.reason)
+                            }
                         }
-                        context.startActivity(intent)
-                    } else {
-                        throw AssistantException(ErrorCategory.ACTION_FAILED, lookup.message, canRetry = false)
+                        is com.example.contact.ContactLookupOutcome.DirectNumber -> {
+                            val res = com.example.contact.CallActionManager.executeCall(context, outcome.phoneNumber, outcome.phoneNumber)
+                            if (res is com.example.contact.CallExecutionResult.Failed) {
+                                throw AssistantException(ErrorCategory.ACTION_FAILED, res.reason)
+                            }
+                        }
+                        is com.example.contact.ContactLookupOutcome.ContactHasNoNumber -> {
+                            throw AssistantException(ErrorCategory.ACTION_FAILED, "That contact doesn't have a phone number.", canRetry = false)
+                        }
+                        is com.example.contact.ContactLookupOutcome.NotFound -> {
+                            throw AssistantException(ErrorCategory.ACTION_FAILED, "I couldn't find that contact.", canRetry = false)
+                        }
+                        is com.example.contact.ContactLookupOutcome.MultipleContacts -> {
+                            throw AssistantException(ErrorCategory.ACTION_FAILED, "Multiple contacts found named $target. Please specify which one.", canRetry = false)
+                        }
+                        is com.example.contact.ContactLookupOutcome.MultipleNumbersForContact -> {
+                            val labels = outcome.numbers.map { it.typeLabel.lowercase() }.distinct().joinToString(", or ")
+                            throw AssistantException(ErrorCategory.ACTION_FAILED, "Multiple numbers found for $target: $labels.", canRetry = false)
+                        }
+                        is com.example.contact.ContactLookupOutcome.PermissionRequired -> {
+                            throw AssistantException(ErrorCategory.PERMISSION_ERROR, outcome.message)
+                        }
+                        is com.example.contact.ContactLookupOutcome.Error -> {
+                            throw AssistantException(ErrorCategory.ACTION_FAILED, outcome.message)
+                        }
                     }
                 }
                 "OPEN_SETTINGS" -> {

@@ -32,6 +32,7 @@ object ActionPlanner {
         - OPEN_APP (payload: android package name like 'com.whatsapp', 'com.instagram.android', 'com.google.android.youtube', 'com.android.chrome')
         - SEARCH_WEB (payload: the search query)
         - OPEN_URL (payload: https URL to open in browser)
+        - PLAY_MUSIC (payload: 'song' or 'song by artist' or 'song on spotify' - opens and searches music on Spotify, YouTube, or YouTube Music)
         - CALL (payload: phone number or contact name)
         - SEND_SMS (payload: 'contact|message' or 'number|message' - opens SMS app with recipient and text prefilled)
         - OPEN_SETTINGS (payload: null)
