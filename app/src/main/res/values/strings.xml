@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">MJ</string>
+    <string name="accessibility_service_description">MJ Assistant uses Accessibility Services to interact with apps on your behalf and carry out complex voice commands across the system.</string>
+</resources>
