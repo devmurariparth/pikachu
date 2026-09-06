@@ -30,7 +30,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Make Gradle wrapper executable
         run: |
@@ -39,7 +39,7 @@ jobs:
 
       # Must match JavaVersion.VERSION_21 / jvmTarget '21' in app/build.gradle.
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -47,7 +47,7 @@ jobs:
       # Only main writes the cache, so pull requests share one warm cache
       # instead of each seeding its own.
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
@@ -56,7 +56,7 @@ jobs:
 
       - name: Upload test reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: test-reports
           path: app/build/reports/tests/
@@ -69,7 +69,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Make Gradle wrapper executable
         run: |
@@ -77,13 +77,13 @@ jobs:
           chmod +x gradlew
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
@@ -94,7 +94,7 @@ jobs:
 
       - name: Upload lint report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: lint-report
           path: |
@@ -115,7 +115,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Make Gradle wrapper executable
         run: |
@@ -123,15 +123,23 @@ jobs:
           chmod +x gradlew
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      # Free space on GitHub hosted runner to ensure adequate room for AVD creation and system images
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          df -h
 
       # GitHub-hosted Linux runners don't grant /dev/kvm access by default;
       # without it the emulator falls back to (much slower, often timing-out)
@@ -152,11 +160,17 @@ jobs:
           arch: x86_64
           target: ${{ matrix.api-level >= 30 && 'google_apis' || 'default' }}
           disable-animations: true
+          cores: 2
+          ram-size: 2048M
+          heap-size: 512M
+          disk-size: 4096M
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          emulator-boot-timeout: 600
           script: ./gradlew :app:connectedDebugAndroidTest --stacktrace
 
       - name: Upload instrumented test reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: instrumented-test-reports-api${{ matrix.api-level }}
           path: app/build/reports/androidTests/connected/
@@ -169,7 +183,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Make Gradle wrapper executable
         run: |
@@ -177,13 +191,13 @@ jobs:
           chmod +x gradlew
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
@@ -196,7 +210,7 @@ jobs:
       # If R8 ever does strip something reflection needs, the minified APK is
       # what gets inspected (apkanalyzer/aapt) to see which class went missing.
       - name: Upload unsigned release APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: app-release-unsigned
           path: app/build/outputs/apk/release/*.apk

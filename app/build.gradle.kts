@@ -24,6 +24,7 @@ android {
   val releaseKeystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
   val releaseKeystoreFile = file(releaseKeystorePath)
   val canSignRelease = !isUnsignedRelease && releaseKeystoreFile.exists()
+  val rootDebugKeystore = file("${rootDir}/debug.keystore")
 
   signingConfigs {
     if (canSignRelease) {
@@ -34,11 +35,15 @@ android {
         keyPassword = System.getenv("KEY_PASSWORD")
       }
     }
-    create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
+    // If a project-level debug.keystore exists (e.g. in local/AI Studio environment), use it.
+    // Otherwise, fall back to AGP's default auto-generated ~/.android/debug.keystore so CI passes cleanly.
+    if (rootDebugKeystore.exists()) {
+      getByName("debug") {
+        storeFile = rootDebugKeystore
+        storePassword = "android"
+        keyAlias = "androiddebugkey"
+        keyPassword = "android"
+      }
     }
   }
 
@@ -52,7 +57,7 @@ android {
       }
     }
     debug {
-      signingConfig = signingConfigs.getByName("debugConfig")
+      // Uses standard debug signing configuration (built-in AGP debug config)
     }
   }
 
