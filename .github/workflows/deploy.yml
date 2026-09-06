@@ -1,4 +1,4 @@
-name: Deploy OpenDroid Premium Website
+name: Deploy Mj Premium Website
 
 on:
   push:
