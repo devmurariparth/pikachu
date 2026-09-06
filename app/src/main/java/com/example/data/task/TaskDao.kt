@@ -32,11 +32,11 @@ interface TaskDao {
     suspend fun deleteTask(task: TaskItem)
 
     @Query("DELETE FROM tasks WHERE id = :id")
-    suspend fun deleteTaskById(id: Long)
+    suspend fun deleteTaskById(id: Long): Int
 
     @Query("UPDATE tasks SET isCompleted = :completed WHERE id = :id")
-    suspend fun setTaskCompleted(id: Long, completed: Boolean)
+    suspend fun setTaskCompleted(id: Long, completed: Boolean): Int
 
     @Query("UPDATE tasks SET reminderWorkId = :workId WHERE id = :id")
-    suspend fun updateWorkId(id: Long, workId: String?)
+    suspend fun updateWorkId(id: Long, workId: String?): Int
 }

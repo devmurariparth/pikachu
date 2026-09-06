@@ -83,23 +83,21 @@ object DeviceControlManager {
     fun toggleBluetooth(context: Context, turnOn: Boolean? = null): DeviceControlResult {
         AssistantLogger.i(TAG, "Toggling Bluetooth (requested: $turnOn)")
 
-        // 1. Android 11+ (API 30+) Bluetooth Panel
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val bluetoothPanelIntent = Intent(Settings.Panel.ACTION_BLUETOOTH).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        // 1. Android Bluetooth Settings
+        val bluetoothPanelIntent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        if (tryLaunchIntent(context, bluetoothPanelIntent)) {
+            val stateText = when (turnOn) {
+                true -> "Turning on Bluetooth."
+                false -> "Turning off Bluetooth."
+                null -> "Opening Bluetooth controls."
             }
-            if (tryLaunchIntent(context, bluetoothPanelIntent)) {
-                val stateText = when (turnOn) {
-                    true -> "Turning on Bluetooth."
-                    false -> "Turning off Bluetooth."
-                    null -> "Opening Bluetooth controls."
-                }
-                return DeviceControlResult(
-                    success = true,
-                    spokenMessage = stateText,
-                    details = "Opened Android Bluetooth panel."
-                )
-            }
+            return DeviceControlResult(
+                success = true,
+                spokenMessage = stateText,
+                details = "Opened Android Bluetooth settings."
+            )
         }
 
         // 2. Fallback via Accessibility Service Quick Settings pull-down

@@ -3,6 +3,7 @@ package com.example
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.UserMemoryManager
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -27,21 +28,21 @@ class OfflineActionHandlerTest {
     }
 
     @Test
-    fun testTimeQueryOffline() {
+    fun testTimeQueryOffline() = runTest {
         val result = OfflineActionHandler.handleOfflineCommand(context, "what time is it")
         assertTrue(result.handled)
         assertTrue(result.spokenResponse.contains("time is", ignoreCase = true))
     }
 
     @Test
-    fun testBatteryQueryOffline() {
+    fun testBatteryQueryOffline() = runTest {
         val result = OfflineActionHandler.handleOfflineCommand(context, "check battery level")
         assertTrue(result.handled)
         assertTrue(result.spokenResponse.contains("Battery"))
     }
 
     @Test
-    fun testMemoryQueryOffline() {
+    fun testMemoryQueryOffline() = runTest {
         UserMemoryManager.rememberPreference("I like coffee in the morning", allowSensitiveIfConsented = false)
         val result = OfflineActionHandler.handleOfflineCommand(context, "what do you remember")
         assertTrue(result.handled)
@@ -49,21 +50,21 @@ class OfflineActionHandlerTest {
     }
 
     @Test
-    fun testOpenAppOffline() {
+    fun testOpenAppOffline() = runTest {
         val result = OfflineActionHandler.handleOfflineCommand(context, "open chrome")
         assertTrue(result.handled)
         assertEquals("OPEN_APP", result.actionTaken)
     }
 
     @Test
-    fun testAlarmOffline() {
+    fun testAlarmOffline() = runTest {
         val result = OfflineActionHandler.handleOfflineCommand(context, "set alarm for 7")
         assertTrue(result.handled)
         assertEquals("SET_ALARM", result.actionTaken)
     }
 
     @Test
-    fun testUnhandledComplexQueryOffline() {
+    fun testUnhandledComplexQueryOffline() = runTest {
         val result = OfflineActionHandler.handleOfflineCommand(context, "explain quantum physics to me in simple terms")
         assertFalse(result.handled)
         assertTrue(result.spokenResponse.contains("offline", ignoreCase = true))
