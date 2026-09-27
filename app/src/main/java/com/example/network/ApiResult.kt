@@ -14,7 +14,6 @@ suspend fun <T> safeApiCall(apiCall: suspend () -> T): ApiResult<T> {
         ApiResult.Success(apiCall())
     } catch (e: retrofit2.HttpException) {
         val code = e.code()
-        val errorMsg = e.response()?.errorBody()?.string() ?: e.message()
         val category = when (code) {
             400 -> ErrorCategory.API_ERROR
             401, 403 -> ErrorCategory.PERMISSION_ERROR
@@ -23,7 +22,7 @@ suspend fun <T> safeApiCall(apiCall: suspend () -> T): ApiResult<T> {
             in 500..599 -> ErrorCategory.AI_SERVICE_ERROR
             else -> ErrorCategory.UNKNOWN_ERROR
         }
-        ApiResult.Error(category, "HTTP $code: $errorMsg", code)
+        ApiResult.Error(category, "AI provider request failed (HTTP $code).", code)
     } catch (e: SocketTimeoutException) {
         ApiResult.Error(ErrorCategory.TIMEOUT_ERROR, "Request timed out. Please try again.")
     } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
