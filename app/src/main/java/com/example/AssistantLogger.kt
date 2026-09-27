@@ -62,6 +62,7 @@ object AssistantLogger {
         sanitized = PASSWORD_PATTERN_REGEX.replace(sanitized) { match ->
             "${match.groupValues[1]}=[REDACTED]"
         }
+        sanitized = QUERY_KEY_REGEX.replace(sanitized, "$1[REDACTED]")
         return sanitized
     }
 
@@ -83,27 +84,32 @@ object AssistantLogger {
     }
 
     fun d(task: String, message: String) {
-        Log.d(TAG, "[$task] $message")
-        addEntry(LogLevel.DEBUG, task, message)
+        val clean = sanitize(message)
+        Log.d(TAG, "[$task] $clean")
+        addEntry(LogLevel.DEBUG, task, clean)
     }
 
     fun i(task: String, message: String) {
-        Log.i(TAG, "[$task] $message")
-        addEntry(LogLevel.INFO, task, message)
+        val clean = sanitize(message)
+        Log.i(TAG, "[$task] $clean")
+        addEntry(LogLevel.INFO, task, clean)
     }
 
     fun w(task: String, message: String) {
-        Log.w(TAG, "[$task] $message")
-        addEntry(LogLevel.WARN, task, message)
+        val clean = sanitize(message)
+        Log.w(TAG, "[$task] $clean")
+        addEntry(LogLevel.WARN, task, clean)
     }
 
     fun e(task: String, message: String, throwable: Throwable? = null) {
-        if (throwable != null) {
-            Log.e(TAG, "[$task] $message", throwable)
+        val clean = sanitize(message)
+        val cleanThrowable = throwable?.let { sanitize(it.message ?: it.javaClass.simpleName) }
+        if (cleanThrowable != null) {
+            Log.e(TAG, "[$task] $clean — $cleanThrowable")
         } else {
-            Log.e(TAG, "[$task] $message")
+            Log.e(TAG, "[$task] $clean")
         }
-        addEntry(LogLevel.ERROR, task, message, throwable)
+        addEntry(LogLevel.ERROR, task, clean, throwable)
     }
 
     fun logState(oldState: String, newState: String, reason: String? = null) {
