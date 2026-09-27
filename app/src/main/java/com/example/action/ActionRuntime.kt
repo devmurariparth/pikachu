@@ -6,6 +6,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.job
+import kotlinx.coroutines.withTimeout
 
 class ActionRuntime(
     private val gateFactory: (Context, ActionContext) -> PermissionPolicyGate = { context, actionContext ->
@@ -30,11 +31,11 @@ class ActionRuntime(
         cancellationRegistry.register(request.id, job)
         return try {
             currentCoroutineContext().ensureActive()
-            val legacyResult = IntentManager.executeAction(
+            val legacyResult = withTimeout(ACTION_TIMEOUT_MS) { IntentManager.executeAction(
                 context = context,
                 action = request.name.name,
                 payload = request.parameters.toLegacyPayload()
-            )
+            ) }
             currentCoroutineContext().ensureActive()
 
             if (legacyResult.isSuccess) {
@@ -49,6 +50,12 @@ class ActionRuntime(
                     )
                 )
             }
+        } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
+            ActionResult.TimedOut(
+                request.id,
+                request.name,
+                ActionError(ActionErrorCode.EXECUTION_FAILED, "Action timed out.")
+            )
         } catch (_: CancellationException) {
             ActionResult.Cancelled(request.id, request.name)
         } catch (t: Throwable) {
@@ -64,6 +71,8 @@ class ActionRuntime(
 
     fun cancel(actionId: String): Boolean = cancellationRegistry.cancel(actionId)
     fun cancelAll() = cancellationRegistry.cancelAll()
+
+    companion object { private const val ACTION_TIMEOUT_MS = 20_000L }
 
     private fun ActionParameters.toLegacyPayload(): String? = when (this) {
         is ActionParameters.OpenApp -> packageName
