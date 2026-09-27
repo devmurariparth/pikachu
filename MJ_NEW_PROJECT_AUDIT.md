@@ -1730,3 +1730,230 @@ In-app Compose assistant with offline command routing, Gemini planning, speech r
 **PHASE 1 — Architecture Foundation + Security Hardening.**
 
 Do not start major feature expansion until Phase 1 is implemented, tested, verified, fixed where necessary, and re-tested.
+
+
+---
+
+# 48. PHASE 1 IMPLEMENTATION STATUS
+
+**Status: COMPLETE**
+
+Phase 1 — Architecture Foundation + Security Hardening — is implemented in the existing devmurariparth/pikachu project only.
+
+No new project was created.
+
+The following Phase 2+ features were intentionally not started:
+- Hey MJ / true hotword
+- background microphone
+- VoiceInteractionService
+- default assistant role
+- YouTube automation
+- Spotify automation
+- WhatsApp automation
+- advanced phone control
+
+## Files changed
+
+### New production architecture
+- app/src/main/java/com/example/action/ActionContracts.kt
+- app/src/main/java/com/example/action/PermissionPolicyGate.kt
+- app/src/main/java/com/example/action/ActionRuntime.kt
+- app/src/main/java/com/example/action/ActionPlanPipeline.kt
+- app/src/main/java/com/example/action/PlannedActionMapper.kt
+- app/src/main/java/com/example/data/SecureSecretStore.kt
+
+### Updated production code
+- app/src/main/java/com/example/ActionPlanner.kt
+- app/src/main/java/com/example/viewmodel/ChatViewModel.kt
+- app/src/main/java/com/example/data/AppSettingsManager.kt
+- app/src/main/java/com/example/AssistantLogger.kt
+- app/src/main/java/com/example/CrashPreventionManager.kt
+- app/src/main/java/com/example/AssistantService.kt
+- app/src/main/java/com/example/network/ApiResult.kt
+- app/src/main/AndroidManifest.xml
+
+### CI / testing
+- .github/workflows/android-ci.yml
+- app/src/test/java/com/example/action/ActionContractsTest.kt
+- app/src/test/java/com/example/action/PermissionPolicyGateTest.kt
+- app/src/test/java/com/example/action/ActionCancellationRegistryTest.kt
+- app/src/test/java/com/example/action/ActionPlanPipelineTest.kt
+- app/src/test/java/com/example/action/PlannedActionMapperTest.kt
+- app/src/test/java/com/example/network/ApiResultTest.kt
+- app/src/androidTest/java/com/example/data/SecureSecretStoreInstrumentedTest.kt
+
+## Features fixed
+
+### Typed action contract
+Added:
+- typed ActionName
+- typed ActionParameters
+- ActionRequest
+- ActionResult
+- ActionError
+- verification state
+- cancellation registry
+- action policy metadata
+- tool contract
+
+Planner output is now converted through PlannedActionMapper before execution.
+
+### Permission / policy gate
+Added a centralized PermissionPolicyGate that checks:
+- Android API support
+- runtime permission requirements
+- system-role requirements
+- Accessibility policy
+- explicit allow/deny policy
+
+Blocked or unsupported actions do not execute.
+
+### Verified-result semantics
+The execution boundary distinguishes:
+- verified success
+- started but not verified
+- failure
+- policy blocked
+- cancelled
+
+Legacy execution success is deliberately represented as Started, not fake verified success, until a dedicated verifier exists.
+
+Multi-step plans stop after an unverified Started result and cannot continue as though the step completed.
+
+### Cancellation
+Added:
+- action cancellation registry
+- coroutine cancellation propagation
+- cancelCurrentAction() in ChatViewModel
+- plan cancellation support
+
+Cancellation is represented as a typed ActionResult.Cancelled.
+
+### Planner foundation
+The new plan pipeline supports:
+plan → validate → execute → verify boundary → continue/fail/cancel.
+
+Full autonomous multi-step agent behavior remains deferred.
+
+### Accessibility boundary
+The existing AccessibilityService remains available but its generic global-action bridge is now restricted to explicit global navigation:
+- Home
+- Back
+- Notifications
+- Recents
+- Quick Settings
+
+It is not exposed as a general UI automation engine.
+
+### Secret handling
+- Local .env remains ignored.
+- No secret value was added to source.
+- User-entered API keys are now encrypted with Android Keystore instead of plain SharedPreferences.
+- Existing plaintext user key storage is migrated into the encrypted store on initialization.
+- Provider error bodies are no longer copied into application error messages.
+- Planner raw AI responses are no longer logged.
+- Logcat output is sanitized before emission.
+
+The previously tracked Gemini credential from the Phase 0 audit still requires rotation/revocation because it existed in repository history. No secret value is reproduced here.
+
+### Crash handling
+The old crash handler no longer suppresses uncaught background exceptions. It retains local crash telemetry but delegates uncaught exceptions to the original handler so broken state is not silently hidden.
+
+### Package visibility
+Removed broad QUERY_ALL_PACKAGES.
+
+Added targeted package queries for the existing supported integrations:
+- Spotify
+- YouTube
+- YouTube Music
+- WhatsApp
+- WhatsApp Business
+- Google Maps
+
+### Android 13 testing
+CI now runs instrumentation on:
+- API 26
+- API 33
+- API 36
+
+Compile SDK and target SDK remain 36.
+
+## Features removed
+
+Only Phase-1 cleanup items were removed:
+- broad QUERY_ALL_PACKAGES permission
+- raw AI-response logging
+- raw provider error-body propagation
+- plaintext user API-key persistence
+- suppression of uncaught background exceptions
+- unrestricted Accessibility global-action execution
+
+Useful MJ command functionality was preserved.
+
+## Test status
+
+Verified GitHub Actions run:
+
+Run: 36309797834
+Verified commit: 521cb7f54bc99fb061000a7b00089d5a02c9bb46
+
+All six CI jobs passed:
+- Unit tests + debug build — PASS
+- Android Lint — PASS
+- Unsigned release/R8 build — PASS
+- Instrumented API 26 — PASS
+- Instrumented API 33 — PASS
+- Instrumented API 36 — PASS
+
+Phase 1 added tests covering:
+- ActionResult semantics
+- typed action parameters
+- permission/policy blocking
+- unsupported API handling
+- Accessibility policy boundary
+- cancellation registry
+- planner validation
+- typed planner mapping
+- provider error result typing
+- Android Keystore secret storage
+
+## Build status
+
+GREEN for the verified Phase 1 code commit.
+
+Verified:
+- testDebugUnitTest
+- assembleDebug
+- lintDebug
+- assembleRelease -PallowUnsignedRelease
+- connected instrumentation tests on API 26
+- connected instrumentation tests on API 33
+- connected instrumentation tests on API 36
+
+No Gradle/AGP/Kotlin version upgrade or downgrade was performed blindly. Existing versions remain the audited baseline.
+
+## Known limitations
+
+1. The current Gemini REST client is still a transitional provider boundary. The final production provider migration should use Firebase AI Logic/App Check or a controlled backend, as planned for the later provider-security phase.
+2. The repository currently does not contain the Firebase configuration required for a production Firebase AI Logic runtime migration, so Phase 1 does not fabricate that configuration.
+3. Some legacy action executors still return a request-started signal rather than a dedicated verified completion signal. The new runtime intentionally refuses to call that verified success.
+4. Full per-tool verification adapters still need to be added during the later tool-system phase.
+5. Accessibility remains optional and policy-gated; it is not a universal automation mechanism.
+6. The existing in-app voice implementation remains in the project, but no new background/system-assistant voice architecture was introduced in Phase 1.
+7. Production release signing remains a separate release-hardening concern.
+
+## Next Phase
+
+PHASE 2 — Official Android Assistant Integration
+
+Planned next work:
+- VoiceInteractionService
+- VoiceInteractionSessionService
+- assistant session lifecycle
+- RoleManager.ROLE_ASSISTANT
+- system-supported assistant invocation
+- lock-screen assistant behavior where supported
+- API 33+ assistant integration tests
+
+Phase 2 must build on the Phase 1 typed action, policy, verification, and cancellation boundaries.
+
