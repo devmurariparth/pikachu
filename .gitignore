@@ -27,6 +27,11 @@ local.properties
 # never go in it — put them in ~/.gradle/gradle.properties or pass them as
 # ORG_GRADLE_PROJECT_* environment variables. See gradle.properties.example.
 
+# Environment secrets — never commit local API keys
+.env
+.env.*
+!.env.example
+
 # Local AI assistant guidance — not tracked
 CLAUDE.md
 docs/superpowers/
