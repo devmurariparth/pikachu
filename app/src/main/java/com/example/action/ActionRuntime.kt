@@ -23,7 +23,11 @@ class ActionRuntime(
         val policy = PermissionPolicyGate.policyFor(request.name)
 
         when (val decision = gate.evaluate(policy)) {
-            is PolicyDecision.Blocked -> return ActionResult.Blocked(request.id, request.name, decision.error)
+            is PolicyDecision.Blocked -> return when (decision.error.code) {
+                ActionErrorCode.PERMISSION_REQUIRED -> ActionResult.PermissionRequired(request.id, request.name, decision.error)
+                ActionErrorCode.UNSUPPORTED -> ActionResult.Unsupported(request.id, request.name, decision.error)
+                else -> ActionResult.Blocked(request.id, request.name, decision.error)
+            }
             PolicyDecision.Allowed -> Unit
         }
 
