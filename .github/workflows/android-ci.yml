@@ -37,7 +37,7 @@ jobs:
           sed -i 's/\r$//' gradlew
           chmod +x gradlew
 
-      # Must match JavaVersion.VERSION_21 / jvmTarget '21' in app/build.gradle.
+      # CI uses JDK 21 for Gradle/AGP; the app bytecode target remains Java 11 by design.
       - name: Set up JDK 21
         uses: actions/setup-java@v5
         with:
