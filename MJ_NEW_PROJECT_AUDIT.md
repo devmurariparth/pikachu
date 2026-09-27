@@ -1957,3 +1957,237 @@ Planned next work:
 
 Phase 2 must build on the Phase 1 typed action, policy, verification, and cancellation boundaries.
 
+
+
+---
+
+# 49. PHASE 2 IMPLEMENTATION STATUS
+
+**Implementation status: COMPLETE**  
+**Verification status: PENDING GitHub Actions execution**
+
+Phase 2 implementation was performed in the existing devmurariparth/pikachu project only. Phase 1 architecture was preserved.
+
+## Files changed
+
+### Voice
+- app/src/main/java/com/example/voice/VoiceState.kt
+- app/src/main/java/com/example/voice/VoiceInteractionManager.kt
+- app/src/main/java/com/example/voice/TtsEngine.kt
+- app/src/main/java/com/example/voice/LanguageNormalizer.kt
+
+### Agent / AI
+- app/src/main/java/com/example/agent/LocalIntentRouter.kt
+- app/src/main/java/com/example/agent/AiProvider.kt
+- app/src/main/java/com/example/agent/ProviderImplementations.kt
+- app/src/main/java/com/example/agent/AgentPipeline.kt
+- app/src/main/java/com/example/ActionPlanner.kt
+- app/src/main/java/com/example/viewmodel/ChatViewModel.kt
+- app/src/main/java/com/example/data/AppSettingsManager.kt
+
+### Phase 1 result contract extension
+- app/src/main/java/com/example/action/ActionContracts.kt
+- app/src/main/java/com/example/action/ActionRuntime.kt
+- app/src/main/java/com/example/action/ActionPlanPipeline.kt
+
+### Tests
+- app/src/test/java/com/example/voice/LanguageNormalizerTest.kt
+- app/src/test/java/com/example/voice/VoiceStateTest.kt
+- app/src/test/java/com/example/agent/LocalIntentRouterTest.kt
+- app/src/test/java/com/example/agent/AiProviderRouterTest.kt
+
+## Features implemented
+
+### Voice state machine
+Added explicit:
+- IDLE
+- LISTENING
+- PROCESSING
+- EXECUTING
+- SPEAKING
+- ERROR
+- CANCELLED
+
+Voice input now has:
+- microphone permission detection
+- safe SpeechRecognizer initialization
+- tap-to-talk start/stop/cancel
+- retry
+- recognition timeout
+- no-speech handling
+- network/server recognition errors
+- recognizer-busy recovery
+- safe destruction
+- no fake Hey MJ background loop
+
+Speech failures are converted into state/error results instead of crashing the app.
+
+### Multilingual handling
+Added support for:
+- Gujarati
+- Hindi
+- English
+- Gujarati-English mixed commands
+- Hindi-English mixed commands
+- transliterated Gujarati/Hindi
+
+Examples covered by tests include:
+- "હમણાં YouTube ખોલ"
+- "अभी YouTube खोलो"
+- "Open YouTube now"
+- "કાલે 8 AM nu alarm set kar"
+- "कल सुबह 8 बजे alarm लगा दो"
+
+Equivalent common commands are normalized before local routing or AI planning.
+
+### TTS
+Added TtsEngine abstraction with AndroidTtsEngine:
+- Gujarati locale selection where device TTS supports it
+- Hindi locale selection
+- English fallback
+- interruption
+- completion/error callbacks
+- safe initialization/shutdown
+- graceful unsupported-language handling
+
+### AI providers
+Added AiProvider abstraction and router with:
+- Gemini adapter
+- OpenAI Responses API adapter
+- provider fallback
+- timeout
+- retry
+- cancellation propagation
+- structured JSON planning contract
+- sanitized provider errors
+- no secret values in logs
+
+OpenAI provider uses the current Responses API architecture and a configurable provider key stored through the Phase 1 Android Keystore-backed secret store. OpenAI's current documentation states that its latest models support multilingual text and are available through the Responses API. 
+
+### Local fast path
+Safe/high-confidence commands now route locally before cloud planning:
+- Home
+- Back
+- Recents
+- Quick Settings
+- Wi-Fi settings path
+- Bluetooth settings path
+- Settings
+- app launching for existing safe app-open commands
+- timer
+- alarm
+
+Unknown/low-confidence commands fall through to AI planning.
+
+### Shared agent path
+Text and voice continue through the same ChatViewModel/action architecture.
+
+The Phase 1 typed ActionRuntime remains the execution boundary, so actions still pass through:
+- policy
+- permission
+- API support
+- cancellation
+- typed ActionResult
+
+### Action results
+Added explicit typed outcomes:
+- Success
+- Started
+- PermissionRequired
+- Unsupported
+- Failure
+- TimedOut
+- Cancelled
+- Blocked
+
+Unverified action starts are not reported as verified completion.
+
+### Cancellation
+Stop/cancel phrases are normalized across supported languages:
+- Stop
+- Cancel
+- રોક
+- બંધ
+- रुको
+- related common transliterations
+
+The active action runtime is cancelled through the existing coroutine cancellation architecture.
+
+### Background preparation
+Only extension points were prepared.
+
+Not implemented:
+- unrestricted background microphone
+- fake Hey MJ
+- VoiceInteractionService
+- default assistant role
+- lock-screen system assistant
+- WhatsApp automation
+- YouTube automation
+- Spotify automation
+- unrestricted Accessibility automation
+- advanced phone control
+
+## Test status
+
+Phase 2 test files have been added for:
+- Gujarati detection
+- Hindi detection
+- English detection
+- mixed-language normalization
+- transliterated language handling
+- cancellation phrase detection
+- local fast-path routing
+- multilingual YouTube open routing
+- multilingual alarm routing
+- timer routing
+- AI provider fallback
+- voice state coverage
+
+**GitHub Actions verification is currently pending.**
+
+Latest run:
+- Run: 36324272355
+- Head commit: 4fefeb2027a45d3bf72442ecf98cdfd5673a86ce
+- Status: pending
+- Jobs: not started yet
+
+Therefore no Phase 2 build/test result is being claimed as PASS until GitHub executes the run.
+
+## Build status
+
+**NOT YET VERIFIED GREEN.**
+
+Phase 1's previously verified green baseline remains unchanged, but Phase 2 must be re-verified after these source changes.
+
+Required verification:
+- unit tests
+- lint
+- assembleDebug
+- unsigned R8 release
+- API 26 instrumentation
+- API 33 instrumentation
+- API 36 instrumentation
+
+## Known limitations
+
+1. Speech recognition language selection still depends on the Android/device speech provider; post-recognition normalization is used to handle mixed/transliterated text.
+2. Gujarati TTS depends on the installed device TTS engine. English is used as a graceful fallback when Gujarati is unavailable.
+3. OpenAI provider configuration requires the user to supply an OpenAI API key through secure settings; no key is bundled in source.
+4. Gemini remains the existing provider implementation and OpenAI is a fallback provider; production provider selection/remote secret proxying can be hardened further later.
+5. Multi-step agent planning is structurally prepared, but full autonomous multi-step verification is intentionally limited by Phase 1's requirement that unverified actions cannot unlock subsequent steps.
+6. No background wake-word implementation was added.
+
+## Next Phase
+
+**PHASE 3 — System Assistant Integration**
+
+Only after Phase 2 verification is green:
+- VoiceInteractionService
+- VoiceInteractionSessionService
+- RoleManager assistant role
+- system assistant lifecycle
+- lock-screen assistant behavior where supported
+- official background assistant integration
+
+No Phase 3 work has been started.
