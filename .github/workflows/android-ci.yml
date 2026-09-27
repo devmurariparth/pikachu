@@ -111,7 +111,7 @@ jobs:
       fail-fast: false
       matrix:
         # minSdk and targetSdk from app/build.gradle - keep in sync.
-        api-level: [26, 36]
+        api-level: [26, 33, 36]
 
     steps:
       - name: Checkout repository
