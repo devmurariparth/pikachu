@@ -33,6 +33,7 @@ object AppSettingsManager {
     private const val KEY_DEFAULT_MUSIC_APP = "default_music_app"
 
     private lateinit var prefs: SharedPreferences
+    private lateinit var secureSecretStore: SecureSecretStore
 
     private val _themePreference = MutableStateFlow(ThemePreference.SYSTEM)
     val themePreference: StateFlow<ThemePreference> = _themePreference.asStateFlow()
@@ -61,6 +62,7 @@ object AppSettingsManager {
     fun init(context: Context) {
         if (!::prefs.isInitialized) {
             prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            secureSecretStore = SecureSecretStore(context)
             loadSettings()
         }
     }
@@ -74,7 +76,13 @@ object AppSettingsManager {
         }
 
         _isDynamicColor.value = prefs.getBoolean(KEY_DYNAMIC_COLOR, true)
-        _customApiKey.value = prefs.getString(KEY_CUSTOM_API_KEY, "") ?: ""
+        val legacyPlaintextKey = prefs.getString(KEY_CUSTOM_API_KEY, "") ?: ""
+        if (legacyPlaintextKey.isNotBlank()) {
+            secureSecretStore.put(KEY_CUSTOM_API_KEY, legacyPlaintextKey)
+            secureSecretStore.remove(KEY_CUSTOM_API_KEY)
+            prefs.edit().remove(KEY_CUSTOM_API_KEY).apply()
+        }
+        _customApiKey.value = secureSecretStore.get(KEY_CUSTOM_API_KEY)
         _isContinuousConversation.value = prefs.getBoolean(KEY_CONTINUOUS_CONVERSATION, true)
         _isWakeWordEnabled.value = prefs.getBoolean(KEY_WAKE_WORD_ENABLED, true)
         _isTtsEnabled.value = prefs.getBoolean(KEY_TTS_ENABLED, true)
@@ -148,8 +156,9 @@ object AppSettingsManager {
         val trimmed = apiKey.trim()
         _customApiKey.value = trimmed
         if (::prefs.isInitialized) {
-            prefs.edit().putString(KEY_CUSTOM_API_KEY, trimmed).apply()
-            AssistantLogger.i("Settings", "Custom API key updated (length: ${trimmed.length})")
+            secureSecretStore.put(KEY_CUSTOM_API_KEY, trimmed)
+            prefs.edit().remove(KEY_CUSTOM_API_KEY).apply()
+            AssistantLogger.i("Settings", "Custom API key updated")
         }
     }
 
