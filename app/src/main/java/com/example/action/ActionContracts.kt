@@ -92,6 +92,24 @@ sealed interface ActionResult {
         override val error: ActionError
     ) : ActionResult { override val verification = VerificationStatus.FAILED }
 
+    data class PermissionRequired(
+        override val actionId: String,
+        override val action: ActionName,
+        override val error: ActionError
+    ) : ActionResult { override val verification = VerificationStatus.FAILED }
+
+    data class Unsupported(
+        override val actionId: String,
+        override val action: ActionName,
+        override val error: ActionError
+    ) : ActionResult { override val verification = VerificationStatus.FAILED }
+
+    data class TimedOut(
+        override val actionId: String,
+        override val action: ActionName,
+        override val error: ActionError
+    ) : ActionResult { override val verification = VerificationStatus.FAILED }
+
     data class Cancelled(
         override val actionId: String,
         override val action: ActionName,
