@@ -60,10 +60,10 @@ class ActionPlanPipeline(
                     is ActionResult.Success -> PlanStepStatus.VERIFIED
                     is ActionResult.Started -> PlanStepStatus.RUNNING
                     is ActionResult.Cancelled -> PlanStepStatus.CANCELLED
-                    is ActionResult.Failure, is ActionResult.Blocked -> PlanStepStatus.FAILED
+                    is ActionResult.Failure, is ActionResult.Blocked, is ActionResult.PermissionRequired, is ActionResult.Unsupported, is ActionResult.TimedOut -> PlanStepStatus.FAILED
                 }
                 results += PlanStepResult(request, result, status)
-                if (result is ActionResult.Failure || result is ActionResult.Blocked || result is ActionResult.Cancelled) {
+                if (result is ActionResult.Failure || result is ActionResult.Blocked || result is ActionResult.PermissionRequired || result is ActionResult.Unsupported || result is ActionResult.TimedOut || result is ActionResult.Cancelled) {
                     return ActionPlanResult(plan, results.toList(), completed = false, cancelled = result is ActionResult.Cancelled)
                 }
                 if (result is ActionResult.Started) {
