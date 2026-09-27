@@ -11,6 +11,9 @@ import com.example.action.ActionName
 import com.example.action.ActionResult
 import com.example.action.ActionRuntime
 import com.example.action.PlannedActionMapper
+import com.example.agent.LocalIntentRouter
+import com.example.agent.LocalRoute
+import com.example.voice.LanguageNormalizer
 import com.example.OfflineActionHandler
 import com.example.WhatsAppManager
 import com.example.data.BatteryOptimizationManager
@@ -532,6 +535,12 @@ class ChatViewModel : ViewModel() {
                lower.startsWith("save preference ")
     }
 
+    private fun localizedLocalSuccess(language: String): String = when (language) {
+        "gu" -> "બરાબર, મેં એ શરૂ કર્યું."
+        "hi" -> "ठीक है, मैंने इसे शुरू कर दिया।"
+        else -> "Okay, I started it."
+    }
+
     fun sendMessage(context: Context, userText: String, isSpokenInput: Boolean = false) {
         val trimmed = userText.trim()
         if (trimmed.isEmpty() || _isProcessing.value) return
@@ -781,6 +790,45 @@ class ChatViewModel : ViewModel() {
         }
 
         // =========================================================================
+        // Phase 2 local fast path: safe, high-confidence commands execute without cloud AI.
+        when (val localRoute = LocalIntentRouter.route(trimmed)) {
+            is LocalRoute.Handled -> {
+                _isProcessing.value = true
+                voiceManager?.setExecutingState()
+                viewModelScope.launch {
+                    try {
+                        val result = actionRuntime.execute(
+                            context,
+                            localRoute.request,
+                            ActionContext(accessibilityAllowed = AssistantService.instance != null)
+                        )
+                        val responseText = when (result) {
+                            is ActionResult.Success -> localizedLocalSuccess(localRoute.language)
+                            is ActionResult.Started -> "I started that, but completion is not verified yet."
+                            is ActionResult.PermissionRequired -> "Permission is required for that action."
+                            is ActionResult.Unsupported -> "That action is not supported on this Android version."
+                            is ActionResult.Blocked -> "I can't run that action right now."
+                            is ActionResult.Failure -> "That action failed."
+                            is ActionResult.TimedOut -> "That action timed out."
+                            is ActionResult.Cancelled -> "Action cancelled."
+                        }
+                        _messages.value = _messages.value + ChatMessage(
+                            sender = MessageSender.AI,
+                            text = responseText,
+                            language = localRoute.language,
+                            isOfflineAction = true
+                        )
+                        voiceManager?.speak(responseText, localRoute.language)
+                    } finally {
+                        _isProcessing.value = false
+                        activeActionId = null
+                    }
+                }
+                return
+            }
+            LocalRoute.FallbackToAi -> Unit
+        }
+
         // GENERAL ASSISTANT / GEMINI ACTION PLANNING WITH OFFLINE FALLBACKS
         // =========================================================================
         _isProcessing.value = true
@@ -847,7 +895,10 @@ class ChatViewModel : ViewModel() {
                     val responseText = when (execResult) {
                         is ActionResult.Success -> plan.speechResponse
                         is ActionResult.Started -> "I started the action, but I cannot verify completion yet."
-                        is ActionResult.Blocked -> "I couldn't run that action: ${execResult.error.message}"
+                        is ActionResult.PermissionRequired -> "Permission is required for that action."
+                        is ActionResult.Unsupported -> "That action is not supported on this Android version."
+                        is ActionResult.Blocked -> "I couldn't run that action."
+                        is ActionResult.TimedOut -> "That action timed out."
                         is ActionResult.Failure -> "The action failed: ${execResult.error.message}"
                         is ActionResult.Cancelled -> "Action cancelled."
                     }
