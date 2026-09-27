@@ -79,7 +79,6 @@ object AppSettingsManager {
         val legacyPlaintextKey = prefs.getString(KEY_CUSTOM_API_KEY, "") ?: ""
         if (legacyPlaintextKey.isNotBlank()) {
             secureSecretStore.put(KEY_CUSTOM_API_KEY, legacyPlaintextKey)
-            secureSecretStore.remove(KEY_CUSTOM_API_KEY)
             prefs.edit().remove(KEY_CUSTOM_API_KEY).apply()
         }
         _customApiKey.value = secureSecretStore.get(KEY_CUSTOM_API_KEY)
@@ -165,6 +164,7 @@ object AppSettingsManager {
     fun clearCustomApiKey() {
         _customApiKey.value = ""
         if (::prefs.isInitialized) {
+            secureSecretStore.remove(KEY_CUSTOM_API_KEY)
             prefs.edit().remove(KEY_CUSTOM_API_KEY).apply()
             AssistantLogger.i("Settings", "Custom API key cleared")
         }
