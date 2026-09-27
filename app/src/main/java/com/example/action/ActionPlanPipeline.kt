@@ -66,6 +66,10 @@ class ActionPlanPipeline(
                 if (result is ActionResult.Failure || result is ActionResult.Blocked || result is ActionResult.Cancelled) {
                     return ActionPlanResult(plan, results.toList(), completed = false, cancelled = result is ActionResult.Cancelled)
                 }
+                if (result is ActionResult.Started) {
+                    // A started-but-unverified step must not unlock later steps.
+                    return ActionPlanResult(plan, results.toList(), completed = false, cancelled = false)
+                }
             }
             ActionPlanResult(plan, results.toList(), completed = true, cancelled = false)
         } catch (_: CancellationException) {
