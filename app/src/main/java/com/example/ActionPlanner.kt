@@ -79,7 +79,7 @@ object ActionPlanner {
 
     suspend fun plan(query: String): Result<PlannedAction> = withContext(Dispatchers.IO) {
         val taskId = "PLANNER_${System.currentTimeMillis()}"
-        AssistantLogger.i(taskId, "Planning action for query: '$query'")
+        AssistantLogger.i(taskId, "Planning action for request")
         
         val apiKey = com.example.data.AppSettingsManager.getActiveApiKey().trim()
         if (apiKey.isEmpty()) {
@@ -114,7 +114,7 @@ object ActionPlanner {
                 val jsonText = result.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text 
                     ?: return@withContext Result.failure(AssistantException(ErrorCategory.AI_SERVICE_ERROR, "Invalid response from AI.", canRetry = true))
                 
-                AssistantLogger.d(taskId, "Raw AI response: $jsonText")
+                AssistantLogger.d(taskId, "AI response received; raw payload omitted from logs")
                 
                 val cleanJson = jsonText.replace("```json", "").replace("```", "").trim()
 
