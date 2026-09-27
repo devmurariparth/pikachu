@@ -26,6 +26,7 @@ object AppSettingsManager {
     private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_DYNAMIC_COLOR = "dynamic_color"
     private const val KEY_CUSTOM_API_KEY = "custom_gemini_api_key"
+    private const val KEY_OPENAI_API_KEY = "custom_openai_api_key"
     private const val KEY_CONTINUOUS_CONVERSATION = "continuous_conversation"
     private const val KEY_WAKE_WORD_ENABLED = "wake_word_enabled"
     private const val KEY_TTS_ENABLED = "tts_enabled"
@@ -45,6 +46,8 @@ object AppSettingsManager {
     val isDynamicColor: StateFlow<Boolean> = _isDynamicColor.asStateFlow()
 
     private val _customApiKey = MutableStateFlow("")
+    private val _openAiApiKey = MutableStateFlow("")
+    val openAiApiKey: StateFlow<String> = _openAiApiKey.asStateFlow()
     val customApiKey: StateFlow<String> = _customApiKey.asStateFlow()
 
     private val _isContinuousConversation = MutableStateFlow(true)
@@ -82,6 +85,7 @@ object AppSettingsManager {
             prefs.edit().remove(KEY_CUSTOM_API_KEY).apply()
         }
         _customApiKey.value = secureSecretStore.get(KEY_CUSTOM_API_KEY)
+        _openAiApiKey.value = secureSecretStore.get(KEY_OPENAI_API_KEY)
         _isContinuousConversation.value = prefs.getBoolean(KEY_CONTINUOUS_CONVERSATION, true)
         _isWakeWordEnabled.value = prefs.getBoolean(KEY_WAKE_WORD_ENABLED, true)
         _isTtsEnabled.value = prefs.getBoolean(KEY_TTS_ENABLED, true)
@@ -186,6 +190,20 @@ object AppSettingsManager {
             ""
         }
     }
+
+
+    fun setOpenAiApiKey(apiKey: String) {
+        val trimmed = apiKey.trim()
+        _openAiApiKey.value = trimmed
+        if (::prefs.isInitialized) secureSecretStore.put(KEY_OPENAI_API_KEY, trimmed)
+    }
+
+    fun clearOpenAiApiKey() {
+        _openAiApiKey.value = ""
+        if (::prefs.isInitialized) secureSecretStore.remove(KEY_OPENAI_API_KEY)
+    }
+
+    fun getOpenAiApiKey(): String = _openAiApiKey.value.trim()
 
     fun isCustomKeyActive(): Boolean {
         return _customApiKey.value.isNotBlank()
