@@ -56,7 +56,23 @@ class AssistantService : AccessibilityService() {
         AssistantLogger.w("AssistantService", "Accessibility service interrupted")
     }
 
+    /**
+     * Explicitly limited Accessibility bridge. This is global navigation only;
+     * arbitrary UI traversal, clicking, text injection, or gesture automation is not exposed here.
+     */
     fun performGlobal(action: Int): Boolean {
+        val allowed = when (action) {
+            GLOBAL_ACTION_HOME,
+            GLOBAL_ACTION_BACK,
+            GLOBAL_ACTION_NOTIFICATIONS,
+            GLOBAL_ACTION_RECENTS,
+            GLOBAL_ACTION_QUICK_SETTINGS -> true
+            else -> false
+        }
+        if (!allowed) {
+            AssistantLogger.w("AssistantService", "Blocked unsupported Accessibility global action")
+            return false
+        }
         return performGlobalAction(action)
     }
 
