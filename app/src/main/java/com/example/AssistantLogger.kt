@@ -48,6 +48,8 @@ object AssistantLogger {
     private val CREDIT_CARD_REGEX = "\\b(?:\\d[ -]*?){13,16}\\b".toRegex()
     private val PASSWORD_PATTERN_REGEX = "(?i)(password|pin|secret|token)\\s*[:=]\\s*['\"]?([^'\"\\s]+)['\"]?".toRegex()
 
+    private val QUERY_KEY_REGEX = "(?i)([?&]key=)[^&\\s]+".toRegex()
+
     private val logQueue = ConcurrentLinkedQueue<LogEntry>()
     private val _logs = MutableStateFlow<List<LogEntry>>(emptyList())
     val logs: StateFlow<List<LogEntry>> = _logs.asStateFlow()
