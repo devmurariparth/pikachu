@@ -33,6 +33,12 @@ object LocalIntentRouter {
         Regex(".*\b(?:set|create)\s+(?:an\s+)?alarm\s+(?:for\s+)?(\d{1,2}).*").matchEntire(q)?.let {
             return h(ActionName.SET_ALARM, ActionParameters.SetAlarm(it.groupValues[1].toInt().coerceIn(0,23)))
         }
+        Regex(".*alarm.*?(\\d{1,2})(?:\\s*(?:am|pm))?.*").matchEntire(q)?.let {
+            return h(ActionName.SET_ALARM, ActionParameters.SetAlarm(it.groupValues[1].toInt().coerceIn(0,23)))
+        }
+        Regex(".*timer.*?(\\d+)\\s*(?:minutes?|min)?.*").matchEntire(q)?.let {
+            return h(ActionName.SET_TIMER, ActionParameters.SetTimer(it.groupValues[1].toInt()))
+        }
         return LocalRoute.FallbackToAi
     }
 }
