@@ -1,13 +1,13 @@
 package com.example.action
 
-import com.example.ActionException
+import com.example.AssistantException
 import com.example.ErrorCategory
 import com.example.PlannedAction
 
 object PlannedActionMapper {
     fun map(plan: PlannedAction, id: String): Result<ActionRequest<out ActionParameters>> {
         fun invalid(message: String) = Result.failure<ActionRequest<out ActionParameters>>(
-            ActionException(ErrorCategory.ACTION_FAILED, message, canRetry = false)
+            AssistantException(ErrorCategory.ACTION_FAILED, message, canRetry = false)
         )
         val name = runCatching { ActionName.valueOf(plan.action.uppercase()) }.getOrElse {
             return invalid("Unsupported action.")
