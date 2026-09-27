@@ -6,6 +6,11 @@ import androidx.lifecycle.viewModelScope
 import com.example.ActionPlanner
 import com.example.AssistantLogger
 import com.example.IntentManager
+import com.example.action.ActionContext
+import com.example.action.ActionName
+import com.example.action.ActionResult
+import com.example.action.ActionRuntime
+import com.example.action.PlannedActionMapper
 import com.example.OfflineActionHandler
 import com.example.WhatsAppManager
 import com.example.data.BatteryOptimizationManager
@@ -53,6 +58,8 @@ data class PendingSensitiveMemory(
 )
 
 class ChatViewModel : ViewModel() {
+    private val actionRuntime = ActionRuntime()
+    private var activeActionId: String? = null
     private val _messages = MutableStateFlow<List<ChatMessage>>(
         listOf(
             ChatMessage(
@@ -442,6 +449,14 @@ class ChatViewModel : ViewModel() {
         voiceManager?.interrupt()
     }
 
+    /** Cancels the currently running planner/execution task without crashing the app. */
+    fun cancelCurrentAction() {
+        activeActionId?.let { actionRuntime.cancel(it) }
+        activeActionId = null
+        _isProcessing.value = false
+        voiceManager?.interrupt()
+    }
+
     fun confirmPendingSensitiveMemory(consentGiven: Boolean) {
         val pending = _pendingSensitiveMemory.value ?: return
         _pendingSensitiveMemory.value = null
@@ -800,12 +815,41 @@ class ChatViewModel : ViewModel() {
 
                     val isMem = plan.action == "SHOW_MEMORIES" || plan.action == "FORGET_MEMORY" || plan.action == "REMEMBER_PREFERENCE"
 
-                    // Execute system intent or navigation
-                    val execResult = IntentManager.executeAction(context, plan.action, plan.payload)
-                    val responseText = if (execResult.isSuccess) {
-                        plan.speechResponse
+                    val actionId = "CHAT_ACTION_${UUID.randomUUID()}"
+                    activeActionId = actionId
+                    val typedRequest = PlannedActionMapper.map(plan, actionId)
+                    val execResult = if (typedRequest.isSuccess) {
+                        actionRuntime.execute(
+                            context = context,
+                            request = typedRequest.getOrThrow(),
+                            actionContext = ActionContext(
+                                // Accessibility is restricted to the explicitly supported global-navigation
+                                // actions. It is never a general UI automation path.
+                                accessibilityAllowed = AssistantService.instance != null
+                            )
+                        )
                     } else {
-                        "${plan.speechResponse}\n(Note: ${execResult.exceptionOrNull()?.message ?: "Action failed"})"
+                        ActionResult.Failure(
+                            actionId = actionId,
+                            action = ActionName.CHAT,
+                            error = typedRequest.exceptionOrNull()?.let {
+                                com.example.action.ActionError(
+                                    com.example.action.ActionErrorCode.INVALID_PARAMETERS,
+                                    it.message ?: "Invalid action parameters."
+                                )
+                            } ?: com.example.action.ActionError(
+                                com.example.action.ActionErrorCode.INVALID_PARAMETERS,
+                                "Invalid action parameters."
+                            )
+                        )
+                    }
+
+                    val responseText = when (execResult) {
+                        is ActionResult.Success -> plan.speechResponse
+                        is ActionResult.Started -> "I started the action, but I cannot verify completion yet."
+                        is ActionResult.Blocked -> "I couldn't run that action: ${execResult.error.message}"
+                        is ActionResult.Failure -> "The action failed: ${execResult.error.message}"
+                        is ActionResult.Cancelled -> "Action cancelled."
                     }
 
                     val aiMessage = ChatMessage(
@@ -815,9 +859,8 @@ class ChatViewModel : ViewModel() {
                         isMemoryAction = isMem
                     )
                     _messages.value = _messages.value + aiMessage
-
-                    // Speak response with automatic language adaptation
-                    voiceManager?.speak(plan.speechResponse, plan.language)
+                    voiceManager?.speak(responseText, plan.language)
+                    activeActionId = null
                 } else {
                     val error = planResult.exceptionOrNull()
                     AssistantLogger.w("ChatViewModel", "AI service failure: ${error?.message}. Attempting offline fallback.")
