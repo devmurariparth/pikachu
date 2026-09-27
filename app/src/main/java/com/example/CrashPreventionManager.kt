@@ -2,7 +2,6 @@ package com.example
 
 import android.content.Context
 import android.os.Handler
-import android.os.Looper
 
 object CrashPreventionManager {
     private var isInitialized = false
@@ -36,20 +35,12 @@ object CrashPreventionManager {
                 // Ignore secondary preference failure
             }
 
-            // If it's a background worker thread, prevent immediate process termination
-            if (thread != Looper.getMainLooper().thread) {
-                AssistantLogger.w(
-                    "CRASH_PREVENTION",
-                    "Caught uncaught background exception on '${thread.name}'. Suppressing fatal crash to maintain assistant stability."
-                )
-                return@setDefaultUncaughtExceptionHandler
-            }
-
-            // If on main thread, pass to original handler after flushing logs
+            // Never swallow uncaught exceptions. Suppressing them can leave shared
+            // state corrupted and make failures appear as successful work.
             originalHandler?.uncaughtException(thread, throwable)
         }
 
-        AssistantLogger.i("CRASH_PREVENTION", "Global crash prevention & telemetry installed successfully.")
+        AssistantLogger.i("CRASH_PREVENTION", "Global crash telemetry installed successfully.")
     }
 
     fun getLastCrashReport(context: Context): String? {
