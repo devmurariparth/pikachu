@@ -13,6 +13,10 @@ import com.example.action.ActionRuntime
 import com.example.action.PlannedActionMapper
 import com.example.agent.LocalIntentRouter
 import com.example.agent.LocalRoute
+import com.example.agent.AiProviderId
+import com.example.agent.AiProviderRouter
+import com.example.agent.GeminiAiProvider
+import com.example.agent.OpenAiProvider
 import com.example.voice.LanguageNormalizer
 import com.example.OfflineActionHandler
 import com.example.WhatsAppManager
@@ -62,6 +66,12 @@ data class PendingSensitiveMemory(
 
 class ChatViewModel : ViewModel() {
     private val actionRuntime = ActionRuntime()
+    private val aiProviderRouter = AiProviderRouter(
+        providers = mapOf(
+            AiProviderId.GEMINI to GeminiAiProvider(),
+            AiProviderId.OPENAI to OpenAiProvider()
+        )
+    )
     private var activeActionId: String? = null
     private val _messages = MutableStateFlow<List<ChatMessage>>(
         listOf(
@@ -544,6 +554,18 @@ class ChatViewModel : ViewModel() {
     fun sendMessage(context: Context, userText: String, isSpokenInput: Boolean = false) {
         val trimmed = userText.trim()
         if (trimmed.isEmpty() || _isProcessing.value) return
+        if (LanguageNormalizer.isCancellation(trimmed)) {
+            cancelCurrentAction()
+            val language = LanguageNormalizer.normalize(trimmed).language.code
+            val response = when (language) {
+                "gu" -> "બરાબર, મેં ચાલુ કામ રોકી દીધું."
+                "hi" -> "ठीक है, मैंने चल रहा काम रोक दिया।"
+                else -> "Okay, I stopped the current task."
+            }
+            _messages.value = _messages.value + ChatMessage(sender = MessageSender.AI, text = response, language = language)
+            voiceManager?.speak(response, language)
+            return
+        }
 
         val userMessage = ChatMessage(
             sender = MessageSender.USER,
@@ -856,10 +878,12 @@ class ChatViewModel : ViewModel() {
 
         viewModelScope.launch {
             try {
-                val planResult = ActionPlanner.plan(trimmed)
+                val normalized = LanguageNormalizer.normalize(trimmed)
+                val planResult = aiProviderRouter.plan(normalized.normalized, normalized.language.code)
                 if (planResult.isSuccess) {
                     val plan = planResult.getOrThrow()
                     _lastPlannedAction.value = plan.action
+                    voiceManager?.setExecutingState()
 
                     val isMem = plan.action == "SHOW_MEMORIES" || plan.action == "FORGET_MEMORY" || plan.action == "REMEMBER_PREFERENCE"
 
