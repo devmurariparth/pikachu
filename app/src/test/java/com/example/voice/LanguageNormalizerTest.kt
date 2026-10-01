@@ -27,14 +27,23 @@ class LanguageNormalizerTest {
         assertTrue(result.mixed)
     }
 
-    @Test fun transliterated_hindi_is_supported() {
-        val result = LanguageNormalizer.normalize("kal subah alarm laga do")
+    @Test fun mixed_hindi_english_is_supported() {
+        val result = LanguageNormalizer.normalize("कल सुबह 8 बजे alarm लगा दो")
         assertEquals(SupportedLanguage.HINDI, result.language)
+        assertTrue(result.mixed)
+    }
+
+    @Test fun transliterated_hindi_is_supported() {
+        assertEquals(SupportedLanguage.HINDI, LanguageNormalizer.normalize("kal subah alarm laga do").language)
     }
 
     @Test fun cancellation_phrases_are_shared() {
-        assertTrue(LanguageNormalizer.isCancellation("Stop"))
-        assertTrue(LanguageNormalizer.isCancellation("રોક"))
-        assertTrue(LanguageNormalizer.isCancellation("रुको"))
+        listOf(
+            "Stop", "રોક", "રોકો", "બંધ", "બંધ કર", "Cancel",
+            "cancel karo", "cancel kar", "रुको", "रोको", "cancel",
+            "  STOP  ", "  cancel   karo  "
+        ).forEach { phrase ->
+            assertTrue("Expected cancellation for: $phrase", LanguageNormalizer.isCancellation(phrase))
+        }
     }
 }
