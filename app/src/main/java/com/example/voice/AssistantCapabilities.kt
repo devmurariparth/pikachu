@@ -1,5 +1,6 @@
 package com.example.voice
 
+import android.annotation.SuppressLint
 import android.Manifest
 import android.app.role.RoleManager
 import android.content.Context
@@ -57,6 +58,7 @@ data class AssistantCapabilityFacts(
 object AssistantCapabilityDetector {
     private const val ROLE_ASSISTANT = "android.app.role.ASSISTANT"
 
+    @SuppressLint("NewApi") // RoleManager is only queried after the API 29 version check below.
     fun detect(context: Context): AssistantCapabilityReport {
         val appContext = context.applicationContext
         val packageManager = appContext.packageManager
