@@ -20,7 +20,7 @@ import java.util.Locale
 
 class VoiceInteractionManager(
     private val context: Context,
-    private val onCommandRecognized: (command: String, wasWakeWordTriggered: Boolean) -> Unit
+    private val onCommandRecognized: (command: String) -> Unit
 ) : RecognitionListener {
 
     companion object {
@@ -34,7 +34,7 @@ class VoiceInteractionManager(
 
     private var speechRecognizer: SpeechRecognizer? = null
     private var listening = false
-    private var lastStartWasWakeMode = false
+    private val stateMachine = AssistantStateMachine()
 
     private val _voiceState = MutableStateFlow<VoiceState>(VoiceState.Idle)
     val voiceState: StateFlow<VoiceState> = _voiceState.asStateFlow()
@@ -55,7 +55,7 @@ class VoiceInteractionManager(
         if (listening) {
             AssistantLogger.w(TAG, "Speech recognition timed out")
             stopListeningInternal()
-            _voiceState.value = VoiceState.Error("Listening timed out. Please try again.", retryable = true)
+            publishState(VoiceState.Error("Listening timed out. Please try again.", retryable = true))
         }
     }
 
@@ -65,42 +65,49 @@ class VoiceInteractionManager(
 
     private fun createRecognizerSafely() {
         mainHandler.post {
-            runCatching {
-                if (!SpeechRecognizer.isRecognitionAvailable(appContext)) {
-                    _voiceState.value = VoiceState.Error("Speech recognition is not available on this device.", retryable = false)
-                    return@runCatching
-                }
-                speechRecognizer?.destroy()
-                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(appContext).apply {
-                    setRecognitionListener(this@VoiceInteractionManager)
-                }
-            }.onFailure {
-                AssistantLogger.w(TAG, "Speech recognizer initialization failed safely")
-                _voiceState.value = VoiceState.Error("Voice input is unavailable right now.", retryable = true)
-            }
+            createRecognizerOnMainThread()
         }
     }
 
-    fun startListening(isWakeWordMode: Boolean = false) {
-        // Phase 2 deliberately does not implement a fake/background wake-word loop.
-        lastStartWasWakeMode = isWakeWordMode
+    private fun createRecognizerOnMainThread() {
+        runCatching {
+            if (!SpeechRecognizer.isRecognitionAvailable(appContext)) {
+                publishState(VoiceState.Error("Speech recognition is not available on this device.", retryable = false))
+                return
+            }
+            speechRecognizer?.destroy()
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(appContext).apply {
+                setRecognitionListener(this@VoiceInteractionManager)
+            }
+        }.onFailure {
+            AssistantLogger.w(TAG, "Speech recognizer initialization failed safely")
+            publishState(VoiceState.Error("Voice input is unavailable right now.", retryable = true))
+        }
+    }
+
+    fun startListening() {
         interrupt()
         if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            _voiceState.value = VoiceState.Error(
+            publishState(VoiceState.Error(
                 "Microphone permission is required.",
                 retryable = false,
                 permissionRequired = true
-            )
+            ))
             return
         }
         if (!SpeechRecognizer.isRecognitionAvailable(appContext)) {
-            _voiceState.value = VoiceState.Error("Speech recognition is not available.", retryable = false)
+            publishState(VoiceState.Error("Speech recognition is not available.", retryable = false))
             return
         }
 
         mainHandler.post {
             try {
-                if (speechRecognizer == null) createRecognizerSafely()
+                if (listening) stopListeningInternal()
+                if (speechRecognizer == null) createRecognizerOnMainThread()
+                val recognizer = speechRecognizer ?: run {
+                    publishState(VoiceState.Error("Voice input is unavailable right now.", retryable = true))
+                    return@post
+                }
                 val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
@@ -113,36 +120,37 @@ class VoiceInteractionManager(
                 _liveTranscription.value = ""
                 _audioRmsLevel.value = 0f
                 listening = true
-                _voiceState.value = VoiceState.Listening()
-                speechRecognizer?.startListening(intent)
+                publishState(VoiceState.Listening())
+                recognizer.startListening(intent)
                 mainHandler.removeCallbacks(timeoutRunnable)
                 mainHandler.postDelayed(timeoutRunnable, LISTEN_TIMEOUT_MS)
             } catch (t: Throwable) {
                 listening = false
-                _voiceState.value = VoiceState.Error("Unable to start voice input. Please try again.", retryable = true)
+                publishState(VoiceState.Error("Unable to start voice input. Please try again.", retryable = true))
                 AssistantLogger.w(TAG, "Speech start failed safely")
             }
         }
     }
 
     fun retry() {
-        if (_voiceState.value is VoiceState.Error) startListening(lastStartWasWakeMode)
+        if (_voiceState.value is VoiceState.Error) startListening()
     }
 
     fun stopListening() {
         mainHandler.post {
             stopListeningInternal()
             if (_voiceState.value is VoiceState.Listening || _voiceState.value is VoiceState.Processing) {
-                _voiceState.value = VoiceState.Idle
+                publishState(VoiceState.Idle)
             }
         }
     }
 
     fun cancelListening() {
-        mainHandler.post {
+        val cancel = Runnable {
             stopListeningInternal()
-            _voiceState.value = VoiceState.Cancelled
+            publishState(VoiceState.Cancelled)
         }
+        if (Looper.myLooper() == Looper.getMainLooper()) cancel.run() else mainHandler.post(cancel)
     }
 
     private fun stopListeningInternal() {
@@ -153,24 +161,24 @@ class VoiceInteractionManager(
     }
 
     fun setProcessingState() {
-        _voiceState.value = VoiceState.Processing
+        publishState(VoiceState.Processing)
     }
 
     fun setThinkingState() = setProcessingState()
 
     fun setExecutingState() {
-        _voiceState.value = VoiceState.Executing
+        publishState(VoiceState.Executing)
     }
 
     fun speak(text: String, languageCode: String = "en", onDone: (() -> Unit)? = null) {
         if (!AppSettingsManager.isTtsEnabled.value) {
-            _voiceState.value = VoiceState.Idle
+            publishState(VoiceState.Idle)
             onDone?.invoke()
             return
         }
         interrupt()
         _detectedLanguage.value = languageCode
-        _voiceState.value = VoiceState.Speaking(text)
+        publishState(VoiceState.Speaking(text))
         _isTtsSpeaking.value = true
         ttsEngine.speak(
             text = text,
@@ -178,17 +186,17 @@ class VoiceInteractionManager(
             onDone = {
                 mainHandler.post {
                     _isTtsSpeaking.value = false
-                    if (_voiceState.value is VoiceState.Speaking) _voiceState.value = VoiceState.Idle
+                    if (_voiceState.value is VoiceState.Speaking) publishState(VoiceState.Idle)
                     onDone?.invoke()
                 }
             },
             onError = {
                 mainHandler.post {
                     _isTtsSpeaking.value = false
-                    _voiceState.value = VoiceState.Error(
+                    publishState(VoiceState.Error(
                         "Text-to-speech is unavailable for this language on this device.",
                         retryable = false
-                    )
+                    ))
                     onDone?.invoke()
                 }
             }
@@ -200,15 +208,23 @@ class VoiceInteractionManager(
         _isTtsSpeaking.value = false
     }
 
+    private fun publishState(next: VoiceState) {
+        if (!stateMachine.transitionTo(next.toAssistantState())) {
+            AssistantLogger.w(TAG, "Ignored illegal assistant state transition")
+            return
+        }
+        _voiceState.value = next
+    }
+
     fun askClarification(prompt: String = "I didn't catch that. Please try again.", language: String = "en") {
-        speak(prompt, language) { startListening(false) }
+        speak(prompt, language) { startListening() }
     }
 
     override fun onReadyForSpeech(params: Bundle?) = Unit
 
     override fun onBeginningOfSpeech() {
         if (!listening) return
-        _voiceState.value = VoiceState.Listening(_liveTranscription.value)
+        publishState(VoiceState.Listening(_liveTranscription.value))
     }
 
     override fun onRmsChanged(rmsdB: Float) {
@@ -222,7 +238,7 @@ class VoiceInteractionManager(
         listening = false
         mainHandler.removeCallbacks(timeoutRunnable)
         _audioRmsLevel.value = 0f
-        _voiceState.value = VoiceState.Processing
+        publishState(VoiceState.Processing)
     }
 
     override fun onError(error: Int) {
@@ -233,28 +249,28 @@ class VoiceInteractionManager(
         when (error) {
             SpeechRecognizer.ERROR_NO_MATCH,
             SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
-                _voiceState.value = VoiceState.Error("I didn't hear a command. Please try again.", retryable = true)
+                publishState(VoiceState.Error("I didn't hear a command. Please try again.", retryable = true))
             }
             SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
-                _voiceState.value = VoiceState.Error("Microphone permission is required.", retryable = false, permissionRequired = true)
+                publishState(VoiceState.Error("Microphone permission is required.", retryable = false, permissionRequired = true))
             }
             SpeechRecognizer.ERROR_NETWORK,
             SpeechRecognizer.ERROR_NETWORK_TIMEOUT,
             SpeechRecognizer.ERROR_SERVER -> {
-                _voiceState.value = VoiceState.Error("Voice recognition could not reach the speech service.", retryable = true)
+                publishState(VoiceState.Error("Voice recognition could not reach the speech service.", retryable = true))
             }
             SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> {
                 createRecognizerSafely()
-                _voiceState.value = VoiceState.Error("Voice input is busy. Please try again.", retryable = true)
+                publishState(VoiceState.Error("Voice input is busy. Please try again.", retryable = true))
             }
             SpeechRecognizer.ERROR_AUDIO -> {
-                _voiceState.value = VoiceState.Error("Microphone audio failed. Please try again.", retryable = true)
+                publishState(VoiceState.Error("Microphone audio failed. Please try again.", retryable = true))
             }
             SpeechRecognizer.ERROR_CLIENT -> {
-                _voiceState.value = VoiceState.Cancelled
+                publishState(VoiceState.Cancelled)
             }
             else -> {
-                _voiceState.value = VoiceState.Error("Voice recognition failed. Please try again.", retryable = true)
+                publishState(VoiceState.Error("Voice recognition failed. Please try again.", retryable = true))
             }
         }
     }
@@ -266,14 +282,14 @@ class VoiceInteractionManager(
         _audioRmsLevel.value = 0f
         val spokenText = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim()
         if (spokenText.isNullOrBlank()) {
-            _voiceState.value = VoiceState.Error("I didn't catch that. Please try again.", retryable = true)
+            publishState(VoiceState.Error("I didn't catch that. Please try again.", retryable = true))
             return
         }
         _liveTranscription.value = spokenText
         val normalized = LanguageNormalizer.normalize(spokenText)
         _detectedLanguage.value = normalized.language.code
-        _voiceState.value = VoiceState.Processing
-        onCommandRecognized(spokenText, false)
+        publishState(VoiceState.Processing)
+        onCommandRecognized(spokenText)
     }
 
     override fun onPartialResults(partialResults: Bundle?) {
@@ -282,7 +298,7 @@ class VoiceInteractionManager(
             ?.takeIf { it.isNotBlank() }
             ?.let {
                 _liveTranscription.value = it
-                _voiceState.value = VoiceState.Listening(it)
+                publishState(VoiceState.Listening(it))
             }
     }
 

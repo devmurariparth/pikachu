@@ -79,11 +79,11 @@ class AssistantService : AccessibilityService() {
     /**
      * Accessibility Service Device Control helpers
      */
-    fun openQuickSettings(): Boolean = performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS)
-    fun openNotifications(): Boolean = performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
-    fun goHome(): Boolean = performGlobalAction(GLOBAL_ACTION_HOME)
-    fun goBack(): Boolean = performGlobalAction(GLOBAL_ACTION_BACK)
-    fun showRecents(): Boolean = performGlobalAction(GLOBAL_ACTION_RECENTS)
+    fun openQuickSettings(): Boolean = performGlobal(GLOBAL_ACTION_QUICK_SETTINGS)
+    fun openNotifications(): Boolean = performGlobal(GLOBAL_ACTION_NOTIFICATIONS)
+    fun goHome(): Boolean = performGlobal(GLOBAL_ACTION_HOME)
+    fun goBack(): Boolean = performGlobal(GLOBAL_ACTION_BACK)
+    fun showRecents(): Boolean = performGlobal(GLOBAL_ACTION_RECENTS)
 
     fun toggleWifi(context: Context, enable: Boolean? = null) {
         com.example.device.DeviceControlManager.toggleWifi(context, enable)

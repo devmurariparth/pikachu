@@ -190,7 +190,7 @@ object VisionAnalyzer {
                 )
             }
             is com.example.network.ApiResult.Error -> {
-                AssistantLogger.w(taskId, "Vision API error: ${apiResult.message}")
+                AssistantLogger.w(taskId, "Vision API request failed: ${apiResult.category}")
                 com.example.GlobalErrorHandler.handleError(apiResult.category, apiResult.message)
                 Result.failure(
                     AssistantException(apiResult.category, apiResult.message, canRetry = true)

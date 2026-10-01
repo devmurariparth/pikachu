@@ -55,7 +55,7 @@ object ConnectionManager {
                     )
                 }
                 is ApiResult.Error -> {
-                    AssistantLogger.e(TAG, "Attempt $attempt failed: ${apiResult.message}")
+                    AssistantLogger.e(TAG, "Connection attempt $attempt failed: ${apiResult.category}")
                     if (attempt == MAX_RETRIES) {
                         return ConnectionTestResult(
                             isSuccess = false,

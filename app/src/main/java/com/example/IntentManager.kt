@@ -12,7 +12,7 @@ import kotlinx.coroutines.withContext
 object IntentManager {
     suspend fun executeAction(context: Context, action: String, payload: String? = null): Result<Unit> = withContext(Dispatchers.Main) {
         val taskId = "EXECUTION_${System.currentTimeMillis()}"
-        AssistantLogger.i(taskId, "Executing action: $action with payload: $payload")
+        AssistantLogger.i(taskId, "Executing action: $action")
         
         try {
             when (action) {
@@ -114,17 +114,11 @@ object IntentManager {
                     context.startActivity(intent)
                 }
                 "GO_HOME" -> {
-                    val service = AssistantService.instance
-                    if (service != null) {
-                        service.performGlobal(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
-                    } else {
-                        // Fallback to Home Intent
-                        val homeIntent = Intent(Intent.ACTION_MAIN).apply {
-                            addCategory(Intent.CATEGORY_HOME)
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        context.startActivity(homeIntent)
+                    val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                        addCategory(Intent.CATEGORY_HOME)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
+                    context.startActivity(homeIntent)
                 }
                 "GO_BACK" -> {
                     val service = AssistantService.instance
@@ -345,7 +339,7 @@ object IntentManager {
                 else -> false
             }
         } catch (e: Exception) {
-            AssistantLogger.w("IntentManager", "Sync execution failed for $action: ${e.message}")
+            AssistantLogger.w("IntentManager", "Sync execution failed for $action")
             false
         }
     }

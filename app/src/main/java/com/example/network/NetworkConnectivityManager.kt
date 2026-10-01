@@ -77,7 +77,7 @@ object NetworkConnectivityManager {
             isRegistered = true
             AssistantLogger.i(TAG, "Network callback registered successfully.")
         } catch (e: Exception) {
-            AssistantLogger.e(TAG, "Failed to register network callback: ${e.message}", e)
+            AssistantLogger.e(TAG, "Failed to register network callback", e)
             checkInitialNetworkState()
         }
     }
@@ -103,7 +103,7 @@ object NetworkConnectivityManager {
                 _networkType.value = if (isConnected) "Active" else "None"
             }
         } catch (e: Exception) {
-            AssistantLogger.w(TAG, "Exception during initial network check: ${e.message}")
+            AssistantLogger.w(TAG, "Initial network check failed")
             _isNetworkAvailable.value = true // Assume optimistic
         }
     }

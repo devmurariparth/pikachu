@@ -124,7 +124,7 @@ object ContactsManager {
             AssistantLogger.e(TAG, "SecurityException while accessing ContactsContract", e)
             ContactLookupOutcome.PermissionRequired("Contact access permission is required.")
         } catch (e: Exception) {
-            AssistantLogger.e(TAG, "Error looking up contact: $query", e)
+            AssistantLogger.e(TAG, "Contact lookup failed", e)
             ContactLookupOutcome.Error("Unable to access contacts.")
         }
     }

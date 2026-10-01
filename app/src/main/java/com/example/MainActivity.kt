@@ -5,11 +5,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,9 +33,15 @@ data class AssistantErrorEvent(val category: ErrorCategory, val message: String)
 
 class MainActivity : ComponentActivity() {
     private val chatViewModel: ChatViewModel by viewModels()
+    private var assistantInvocationToken by mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null &&
+            com.example.voice.SystemAssistantInvocation.isAssistantInvocation(intent)
+        ) {
+            assistantInvocationToken = 1
+        }
         CrashPreventionManager.init(applicationContext)
         NetworkConnectivityManager.init(applicationContext)
         BatteryOptimizationManager.init(applicationContext)
@@ -63,6 +71,10 @@ class MainActivity : ComponentActivity() {
                     var previousScreen by remember { mutableStateOf("chat") }
                     var errorEvent by remember { mutableStateOf<AssistantErrorEvent?>(null) }
 
+                    LaunchedEffect(assistantInvocationToken) {
+                        if (assistantInvocationToken > 0) currentScreen = "chat"
+                    }
+
                     fun handleGlobalError(category: ErrorCategory, message: String) {
                         errorEvent = AssistantErrorEvent(category, message)
                         val formattedError = "${errorEvent?.category?.name}: ${errorEvent?.message}"
@@ -72,6 +84,7 @@ class MainActivity : ComponentActivity() {
                     when (currentScreen) {
                         "chat" -> AssistantOverlayScreen(
                             viewModel = chatViewModel,
+                            assistantInvocationToken = assistantInvocationToken,
                             onBack = { currentScreen = "setup" },
                             onOpenSettings = {
                                 previousScreen = "chat"
@@ -99,8 +112,11 @@ class MainActivity : ComponentActivity() {
         chatViewModel.voiceManager?.pause()
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        chatViewModel.voiceManager?.destroy()
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (com.example.voice.SystemAssistantInvocation.isAssistantInvocation(intent)) {
+            assistantInvocationToken += 1
+        }
     }
 }

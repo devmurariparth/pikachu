@@ -70,7 +70,7 @@ object AssistantLogger {
 
     private fun addEntry(level: LogLevel, tag: String, rawMessage: String, throwable: Throwable? = null) {
         val cleanMsg = sanitize(rawMessage)
-        val cleanThrowable = throwable?.let { sanitize(it.message ?: it.javaClass.simpleName) }
+        val cleanThrowable = throwable?.javaClass?.simpleName
         val entry = LogEntry(
             level = level,
             tag = tag,
@@ -105,7 +105,7 @@ object AssistantLogger {
 
     fun e(task: String, message: String, throwable: Throwable? = null) {
         val clean = sanitize(message)
-        val cleanThrowable = throwable?.let { sanitize(it.message ?: it.javaClass.simpleName) }
+        val cleanThrowable = throwable?.javaClass?.simpleName
         if (cleanThrowable != null) {
             Log.e(TAG, "[$task] $clean — $cleanThrowable")
         } else {
@@ -120,7 +120,7 @@ object AssistantLogger {
     }
 
     fun logError(error: AssistantException) {
-        e("ERROR_HANDLER", "Category: ${error.category}, Message: ${error.message}, CanRetry: ${error.canRetry}", error)
+        e("ERROR_HANDLER", "Category: ${error.category}, CanRetry: ${error.canRetry}")
     }
 
     fun clear() {

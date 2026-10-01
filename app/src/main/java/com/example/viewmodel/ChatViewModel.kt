@@ -3,16 +3,12 @@ package com.example.viewmodel
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.ActionPlanner
 import com.example.AssistantService
 import com.example.AssistantLogger
 import com.example.action.ActionContext
-import com.example.action.ActionName
 import com.example.action.ActionResult
 import com.example.action.ActionRuntime
-import com.example.action.PlannedActionMapper
-import com.example.agent.LocalIntentRouter
-import com.example.agent.LocalRoute
+import com.example.agent.AgentPipeline
 import com.example.agent.AiProviderId
 import com.example.agent.AiProviderRouter
 import com.example.agent.GeminiAiProvider
@@ -34,6 +30,10 @@ import com.example.voice.VoiceState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -66,6 +66,7 @@ data class PendingSensitiveMemory(
 
 class ChatViewModel : ViewModel() {
     private val actionRuntime = ActionRuntime()
+    private val agentPipeline = AgentPipeline(actionRuntime)
     private val aiProviderRouter = AiProviderRouter(
         providers = mapOf(
             AiProviderId.GEMINI to GeminiAiProvider(),
@@ -73,11 +74,12 @@ class ChatViewModel : ViewModel() {
         )
     )
     private var activeActionId: String? = null
+    private var activeCommandJob: Job? = null
     private val _messages = MutableStateFlow<List<ChatMessage>>(
         listOf(
             ChatMessage(
                 sender = MessageSender.AI,
-                text = "Hello! I'm MJ, your intelligent personal assistant. You can speak to me by saying \"Hey MJ\", tapping the microphone, or typing your request."
+                text = "Hello! I'm MJ. Tap the microphone or invoke MJ through Android's assistant role to speak, or type your request."
             )
         )
     )
@@ -325,7 +327,7 @@ class ChatViewModel : ViewModel() {
             val result = com.example.contact.CallActionManager.executeCall(context, option.displayName, option.phoneNumber)
             when (result) {
                 is com.example.contact.CallExecutionResult.Started -> {
-                    AssistantLogger.i("ChatViewModel", "Call placed to ${option.displayName}")
+                    AssistantLogger.i("ChatViewModel", "Call action started")
                 }
                 is com.example.contact.CallExecutionResult.DialerOpened -> {
                     AssistantLogger.w("ChatViewModel", "Dialer fallback used: ${result.reason}")
@@ -350,7 +352,7 @@ class ChatViewModel : ViewModel() {
      * Executes a music playback / search command locally with zero AI latency.
      */
     fun handleDirectMusicCommand(context: Context, command: com.example.music.MusicCommand) {
-        AssistantLogger.i("ChatViewModel", "Executing direct music command: song='${command.song}', artist='${command.artist}', platform=${command.platform}")
+        AssistantLogger.i("ChatViewModel", "Executing direct music command")
         val result = com.example.music.MusicActionManager.executeMusicCommand(context, command)
         when (result) {
             is com.example.music.MusicExecutionResult.Success -> {
@@ -423,6 +425,7 @@ class ChatViewModel : ViewModel() {
     }
 
     fun initVoiceManager(context: Context) {
+        if (voiceManager != null) return
         TaskManager.init(context)
         viewModelScope.launch {
             TaskManager.tasksFlow?.collect {
@@ -432,8 +435,8 @@ class ChatViewModel : ViewModel() {
         if (voiceManager == null) {
             voiceManager = VoiceInteractionManager(
                 context = context.applicationContext,
-                onCommandRecognized = { command, wasWakeWord ->
-                    AssistantLogger.i("ChatViewModel", "Voice command received (wakeWord=$wasWakeWord): '$command'")
+                onCommandRecognized = { command ->
+                    AssistantLogger.i("ChatViewModel", "Voice command received")
                     sendMessage(context, command, isSpokenInput = true)
                 }
             ).also { vm ->
@@ -450,8 +453,8 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    fun startListening(isWakeWordMode: Boolean = false) {
-        voiceManager?.startListening(isWakeWordMode)
+    fun startListening() {
+        voiceManager?.startListening()
     }
 
     fun stopListening() {
@@ -466,6 +469,10 @@ class ChatViewModel : ViewModel() {
     fun cancelCurrentAction() {
         activeActionId?.let { actionRuntime.cancel(it) }
         activeActionId = null
+        activeCommandJob?.cancel(CancellationException("Cancelled by user"))
+        activeCommandJob = null
+        actionRuntime.cancelAll()
+        voiceManager?.cancelListening()
         _isProcessing.value = false
         voiceManager?.interrupt()
     }
@@ -553,7 +560,7 @@ class ChatViewModel : ViewModel() {
 
     fun sendMessage(context: Context, userText: String, isSpokenInput: Boolean = false) {
         val trimmed = userText.trim()
-        if (trimmed.isEmpty() || _isProcessing.value) return
+        if (trimmed.isEmpty()) return
         if (LanguageNormalizer.isCancellation(trimmed)) {
             cancelCurrentAction()
             val language = LanguageNormalizer.normalize(trimmed).language.code
@@ -566,6 +573,7 @@ class ChatViewModel : ViewModel() {
             voiceManager?.speak(response, language)
             return
         }
+        if (_isProcessing.value) return
 
         val userMessage = ChatMessage(
             sender = MessageSender.USER,
@@ -780,167 +788,55 @@ class ChatViewModel : ViewModel() {
         }
 
         // =========================================================================
-        // FAST DIRECT DEVICE CONTROLS (Accessibility Service & System Controls)
-        // =========================================================================
-        val lower = trimmed.lowercase().trim()
-        if (lower.contains("wifi") || lower.contains("wi-fi") ||
-            lower.contains("bluetooth") ||
-            lower.contains("brightness") ||
-            lower == "quick settings" || lower == "open quick settings"
-        ) {
-            val devResult = when {
-                lower.contains("wifi") || lower.contains("wi-fi") -> {
-                    val on = if (lower.contains("off") || lower.contains("disable")) false else true
-                    DeviceControlManager.toggleWifi(context, on)
-                }
-                lower.contains("bluetooth") -> {
-                    val on = if (lower.contains("off") || lower.contains("disable")) false else true
-                    DeviceControlManager.toggleBluetooth(context, on)
-                }
-                lower.contains("brightness") -> {
-                    val percent = "(\\d{1,3})".toRegex().find(lower)?.groupValues?.get(1)?.toIntOrNull() ?: 80
-                    DeviceControlManager.setBrightness(context, percent)
-                }
-                else -> DeviceControlManager.openQuickSettings()
-            }
-            _messages.value = _messages.value + ChatMessage(
-                sender = MessageSender.AI,
-                text = devResult.spokenMessage
-            )
-            voiceManager?.speak(devResult.spokenMessage)
-            return
-        }
+        // Phase 2 local and AI-routed commands share AgentPipeline below.
 
-        // =========================================================================
-        // Phase 2 local fast path: safe, high-confidence commands execute without cloud AI.
-        when (val localRoute = LocalIntentRouter.route(trimmed)) {
-            is LocalRoute.Handled -> {
-                _isProcessing.value = true
-                voiceManager?.setExecutingState()
-                viewModelScope.launch {
-                    try {
-                        val result = actionRuntime.execute(
-                            context,
-                            localRoute.request,
-                            ActionContext(accessibilityAllowed = AssistantService.instance != null)
-                        )
-                        val responseText = when (result) {
-                            is ActionResult.Success -> localizedLocalSuccess(localRoute.language)
-                            is ActionResult.Started -> "I started that, but completion is not verified yet."
-                            is ActionResult.PermissionRequired -> "Permission is required for that action."
-                            is ActionResult.Unsupported -> "That action is not supported on this Android version."
-                            is ActionResult.Blocked -> "I can't run that action right now."
-                            is ActionResult.Failure -> "That action failed."
-                            is ActionResult.TimedOut -> "That action timed out."
-                            is ActionResult.Cancelled -> "Action cancelled."
-                        }
-                        _messages.value = _messages.value + ChatMessage(
-                            sender = MessageSender.AI,
-                            text = responseText,
-                            language = localRoute.language,
-                            isOfflineAction = true
-                        )
-                        voiceManager?.speak(responseText, localRoute.language)
-                    } finally {
-                        _isProcessing.value = false
-                        activeActionId = null
-                    }
-                }
-                return
-            }
-            LocalRoute.FallbackToAi -> Unit
-        }
-
-        // GENERAL ASSISTANT / GEMINI ACTION PLANNING WITH OFFLINE FALLBACKS
-        // =========================================================================
+        // System assistant invocation and chat share local-route -> planner -> action execution.
         _isProcessing.value = true
         voiceManager?.setThinkingState()
-
-        // 1. Instant offline execution if network is completely unavailable
-        if (!NetworkConnectivityManager.isNetworkAvailable.value) {
-            viewModelScope.launch {
-                val offlineResult = OfflineActionHandler.handleOfflineCommand(context, trimmed)
-                val replyText = if (offlineResult.handled) {
-                    "${offlineResult.spokenResponse}\n(Executed in Offline Mode)"
-                } else {
-                    offlineResult.spokenResponse
-                }
-                _messages.value = _messages.value + ChatMessage(
-                    sender = MessageSender.AI,
-                    text = replyText,
-                    isOfflineAction = true
-                )
-                voiceManager?.speak(offlineResult.spokenResponse)
-                _isProcessing.value = false
-            }
-            return
-        }
-
-        viewModelScope.launch {
+        val executionJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
             try {
-                val normalized = LanguageNormalizer.normalize(trimmed)
-                val planResult = aiProviderRouter.plan(normalized.normalized, normalized.language.code)
-                if (planResult.isSuccess) {
-                    val plan = planResult.getOrThrow()
-                    _lastPlannedAction.value = plan.action
-                    voiceManager?.setExecutingState()
-
-                    val isMem = plan.action == "SHOW_MEMORIES" || plan.action == "FORGET_MEMORY" || plan.action == "REMEMBER_PREFERENCE"
-
-                    val actionId = "CHAT_ACTION_${UUID.randomUUID()}"
-                    activeActionId = actionId
-                    val typedRequest = PlannedActionMapper.map(plan, actionId)
-                    val execResult = if (typedRequest.isSuccess) {
-                        actionRuntime.execute(
-                            context = context,
-                            request = typedRequest.getOrThrow(),
-                            actionContext = ActionContext(
-                                // Accessibility is restricted to the explicitly supported global-navigation
-                                // actions. It is never a general UI automation path.
-                                accessibilityAllowed = AssistantService.instance != null
-                            )
-                        )
-                    } else {
-                        ActionResult.Failure(
-                            actionId = actionId,
-                            action = ActionName.CHAT,
-                            error = typedRequest.exceptionOrNull()?.let {
-                                com.example.action.ActionError(
-                                    com.example.action.ActionErrorCode.INVALID_PARAMETERS,
-                                    it.message ?: "Invalid action parameters."
-                                )
-                            } ?: com.example.action.ActionError(
-                                com.example.action.ActionErrorCode.INVALID_PARAMETERS,
-                                "Invalid action parameters."
-                            )
-                        )
+                val online = NetworkConnectivityManager.isNetworkAvailable.value
+                val commandResult = agentPipeline.execute(
+                    context = context.applicationContext,
+                    command = trimmed,
+                    planner = { normalizedCommand, language ->
+                        if (online) aiProviderRouter.plan(normalizedCommand, language)
+                        else Result.failure(IllegalStateException("Offline"))
+                    },
+                    actionContext = ActionContext(
+                        // The runtime policy still limits accessibility to approved global navigation.
+                        accessibilityAllowed = AssistantService.instance != null
+                    ),
+                    onActionExecutionStarting = { request ->
+                        activeActionId = request.id
+                        _lastPlannedAction.value = request.name.name
+                        voiceManager?.setExecutingState()
                     }
-
-                    val responseText = when (execResult) {
-                        is ActionResult.Success -> plan.speechResponse
+                )
+                if (commandResult.isSuccess) {
+                    val outcome = commandResult.getOrThrow()
+                    val responseText = when (val actionResult = outcome.result) {
+                        is ActionResult.Success -> outcome.plannedAction?.speechResponse
+                            ?: localizedLocalSuccess(outcome.language)
                         is ActionResult.Started -> "I started the action, but I cannot verify completion yet."
                         is ActionResult.PermissionRequired -> "Permission is required for that action."
                         is ActionResult.Unsupported -> "That action is not supported on this Android version."
                         is ActionResult.Blocked -> "I couldn't run that action."
                         is ActionResult.TimedOut -> "That action timed out."
-                        is ActionResult.Failure -> "The action failed: ${execResult.error.message}"
+                        is ActionResult.Failure -> "The action failed: ${actionResult.error.message}"
                         is ActionResult.Cancelled -> "Action cancelled."
                     }
-
-                    val aiMessage = ChatMessage(
+                    val plannedName = outcome.plannedAction?.action
+                    _messages.value = _messages.value + ChatMessage(
                         sender = MessageSender.AI,
                         text = responseText,
-                        language = plan.language,
-                        isMemoryAction = isMem
+                        language = outcome.language,
+                        isMemoryAction = plannedName in setOf("SHOW_MEMORIES", "FORGET_MEMORY", "REMEMBER_PREFERENCE"),
+                        isOfflineAction = outcome.fromLocalFastPath
                     )
-                    _messages.value = _messages.value + aiMessage
-                    voiceManager?.speak(responseText, plan.language)
-                    activeActionId = null
+                    voiceManager?.speak(responseText, outcome.language)
                 } else {
-                    val error = planResult.exceptionOrNull()
-                    AssistantLogger.w("ChatViewModel", "AI service failure: ${error?.message}. Attempting offline fallback.")
-
-                    // Try offline fallback handler
+                    AssistantLogger.w("ChatViewModel", "Assistant planner unavailable; attempting offline fallback")
                     val offlineFallback = OfflineActionHandler.handleOfflineCommand(context, trimmed)
                     if (offlineFallback.handled) {
                         val fallbackResponse = "${offlineFallback.spokenResponse}\n(Executed via offline fallback)"
@@ -951,7 +847,7 @@ class ChatViewModel : ViewModel() {
                         )
                         voiceManager?.speak(offlineFallback.spokenResponse)
                     } else {
-                        val friendlyError = "I couldn't reach the AI service (${error?.message ?: "Connection issue"}). You can still launch apps, adjust device settings, set alarms, or ask 'What do you remember?' offline."
+                        val friendlyError = "I couldn't reach the AI service. You can still launch apps, adjust device settings, set alarms, or ask 'What do you remember?' offline."
                         _messages.value = _messages.value + ChatMessage(
                             sender = MessageSender.AI,
                             text = friendlyError,
@@ -960,8 +856,10 @@ class ChatViewModel : ViewModel() {
                         voiceManager?.speak("I'm unable to connect to the AI service right now. Local device controls and memories are still available.")
                     }
                 }
-            } catch (e: Exception) {
-                AssistantLogger.e("ChatViewModel", "Unexpected error processing message", e)
+            } catch (_: CancellationException) {
+                // cancelCurrentAction() has already stopped recognition/TTS and acknowledged cancellation.
+            } catch (_: Exception) {
+                AssistantLogger.w("ChatViewModel", "Assistant command failed; attempting offline fallback")
                 val offlineFallback = OfflineActionHandler.handleOfflineCommand(context, trimmed)
                 if (offlineFallback.handled) {
                     _messages.value = _messages.value + ChatMessage(
@@ -980,9 +878,15 @@ class ChatViewModel : ViewModel() {
                     voiceManager?.speak(fallbackText)
                 }
             } finally {
-                _isProcessing.value = false
+                if (activeCommandJob === currentCoroutineContext()[Job]) {
+                    activeCommandJob = null
+                    activeActionId = null
+                    _isProcessing.value = false
+                }
             }
         }
+        activeCommandJob = executionJob
+        executionJob.start()
     }
 
     /**

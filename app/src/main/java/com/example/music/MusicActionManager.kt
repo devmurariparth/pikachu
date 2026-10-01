@@ -228,7 +228,7 @@ object MusicActionManager {
         } catch (e: PackageManager.NameNotFoundException) {
             false
         } catch (e: Exception) {
-            AssistantLogger.w(TAG, "Error checking package $packageName: ${e.message}")
+            AssistantLogger.w(TAG, "Unable to check media app availability")
             false
         }
     }
@@ -341,7 +341,7 @@ object MusicActionManager {
                     )
                 }
             } catch (e: Exception) {
-                AssistantLogger.w(TAG, "Spotify media search intent failed: ${e.message}")
+                AssistantLogger.w(TAG, "Spotify media search intent failed")
             }
 
             // 2. Direct Spotify search deep-link fallback
@@ -361,7 +361,7 @@ object MusicActionManager {
                     actionTaken = "OPEN_SPOTIFY"
                 )
             } catch (e: Exception) {
-                AssistantLogger.e(TAG, "Spotify deep link failed: ${e.message}", e)
+                AssistantLogger.e(TAG, "Spotify deep link failed", e)
             }
         }
 
@@ -389,7 +389,7 @@ object MusicActionManager {
                 actionTaken = "OPEN_SPOTIFY_WEB"
             )
         } catch (e: Exception) {
-            AssistantLogger.e(TAG, "Spotify web fallback failed: ${e.message}", e)
+            AssistantLogger.e(TAG, "Spotify web fallback failed", e)
             MusicExecutionResult.Error(
                 spokenResponse = "I couldn't open Spotify or a web browser to search for $song.",
                 errorDetails = e.message ?: "Unknown browser error"
@@ -425,7 +425,7 @@ object MusicActionManager {
                     actionTaken = "OPEN_YOUTUBE"
                 )
             } catch (e: Exception) {
-                AssistantLogger.w(TAG, "YouTube app intent failed: ${e.message}")
+                AssistantLogger.w(TAG, "YouTube app intent failed")
             }
         }
 
@@ -450,7 +450,7 @@ object MusicActionManager {
                 actionTaken = "OPEN_YOUTUBE_WEB"
             )
         } catch (e: Exception) {
-            AssistantLogger.e(TAG, "YouTube web fallback failed: ${e.message}", e)
+            AssistantLogger.e(TAG, "YouTube web fallback failed", e)
             MusicExecutionResult.Error(
                 spokenResponse = "I couldn't open YouTube or a browser to search for $song.",
                 errorDetails = e.message ?: "Unknown browser error"
@@ -486,7 +486,7 @@ object MusicActionManager {
                     actionTaken = "OPEN_YOUTUBE_MUSIC"
                 )
             } catch (e: Exception) {
-                AssistantLogger.w(TAG, "YouTube Music app intent failed: ${e.message}")
+                AssistantLogger.w(TAG, "YouTube Music app intent failed")
             }
         }
 
@@ -510,7 +510,7 @@ object MusicActionManager {
                     actionTaken = "OPEN_YOUTUBE"
                 )
             } catch (e: Exception) {
-                AssistantLogger.w(TAG, "YouTube fallback failed: ${e.message}")
+                AssistantLogger.w(TAG, "YouTube fallback failed")
             }
         }
 
@@ -530,7 +530,7 @@ object MusicActionManager {
                 actionTaken = "OPEN_YOUTUBE_MUSIC_WEB"
             )
         } catch (e: Exception) {
-            AssistantLogger.e(TAG, "YouTube Music browser fallback failed: ${e.message}", e)
+            AssistantLogger.e(TAG, "YouTube Music browser fallback failed", e)
             MusicExecutionResult.Error(
                 spokenResponse = "I couldn't open YouTube Music or a web browser to search for $song.",
                 errorDetails = e.message ?: "Unknown browser error"

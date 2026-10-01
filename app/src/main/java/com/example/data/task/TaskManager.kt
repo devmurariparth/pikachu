@@ -90,7 +90,7 @@ object TaskManager {
             }
         }
 
-        AssistantLogger.i(TAG, "Persisted task #$taskId in Room: '${savedTask.title}' (reminder: ${savedTask.reminderTimeMillis})")
+        AssistantLogger.i(TAG, "Persisted a task in Room")
         savedTask
     }
 

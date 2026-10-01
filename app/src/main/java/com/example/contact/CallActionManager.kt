@@ -141,7 +141,7 @@ object CallActionManager {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(callIntent)
-            AssistantLogger.i(TAG, "ACTION_CALL dispatched for contact: $contactDisplayName")
+            AssistantLogger.i(TAG, "ACTION_CALL dispatched")
             CallExecutionResult.Started(contactDisplayName)
         } catch (e: SecurityException) {
             AssistantLogger.e(TAG, "SecurityException during ACTION_CALL. Falling back to dialer.", e)

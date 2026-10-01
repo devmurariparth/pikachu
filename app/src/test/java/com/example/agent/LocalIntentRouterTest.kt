@@ -75,4 +75,17 @@ class LocalIntentRouterTest {
         val route = handled("set a timer for 5 minutes")
         assertEquals(ActionName.SET_TIMER, route.request.name)
     }
+
+    @Test fun notification_and_brightness_commands_use_the_policy_gated_pipeline() {
+        assertEquals(ActionName.OPEN_NOTIFICATIONS, handled("open notifications").request.name)
+        val brightness = handled("set brightness to 42 percent")
+        assertEquals(ActionName.SET_BRIGHTNESS, brightness.request.name)
+        assertEquals(42, (brightness.request.parameters as ActionParameters.SetBrightness).percent)
+    }
+
+    @Test fun wifi_commands_open_android_controls_without_claiming_a_silent_toggle() {
+        val route = handled("turn off wifi")
+        assertEquals(ActionName.TOGGLE_WIFI, route.request.name)
+        assertEquals("off", (route.request.parameters as ActionParameters.ToggleWifi).state)
+    }
 }

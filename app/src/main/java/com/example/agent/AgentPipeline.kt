@@ -8,23 +8,32 @@ import com.example.action.ActionRuntime
 import com.example.action.PlannedActionMapper
 import com.example.voice.LanguageNormalizer
 import java.util.UUID
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 class AgentPipeline(private val runtime: ActionRuntime = ActionRuntime()) {
     suspend fun execute(
         context: Context,
         command: String,
         planner: suspend (String, String) -> Result<PlannedAction>,
-        actionContext: ActionContext = ActionContext()
+        actionContext: ActionContext = ActionContext(),
+        onActionExecutionStarting: (ActionRequest<out ActionParameters>) -> Unit = {}
     ): Result<AgentOutcome> {
         val normalized = LanguageNormalizer.normalize(command)
         return when (val local = LocalIntentRouter.route(command)) {
-            is LocalRoute.Handled -> Result.success(
-                AgentOutcome(local.language, runtime.execute(context, local.request, actionContext), true)
-            )
+            is LocalRoute.Handled -> {
+                onActionExecutionStarting(local.request)
+                val result = runtime.execute(context, local.request, actionContext)
+                currentCoroutineContext().ensureActive()
+                Result.success(AgentOutcome(local.language, result, true))
+            }
             LocalRoute.FallbackToAi -> {
                 val planned = planner(normalized.normalized, normalized.language.code).getOrElse { return Result.failure(it) }
                 val request = PlannedActionMapper.map(planned, "AI_" + UUID.randomUUID()).getOrElse { return Result.failure(it) }
-                Result.success(AgentOutcome(planned.language, runtime.execute(context, request, actionContext), false))
+                onActionExecutionStarting(request)
+                val result = runtime.execute(context, request, actionContext)
+                currentCoroutineContext().ensureActive()
+                Result.success(AgentOutcome(planned.language, result, false, planned))
             }
         }
     }
@@ -33,4 +42,9 @@ class AgentPipeline(private val runtime: ActionRuntime = ActionRuntime()) {
     fun cancelAll() = runtime.cancelAll()
 }
 
-data class AgentOutcome(val language: String, val result: ActionResult, val fromLocalFastPath: Boolean)
+data class AgentOutcome(
+    val language: String,
+    val result: ActionResult,
+    val fromLocalFastPath: Boolean,
+    val plannedAction: PlannedAction? = null
+)

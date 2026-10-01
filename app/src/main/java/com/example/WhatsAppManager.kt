@@ -40,7 +40,7 @@ object WhatsAppManager {
      * targeting WhatsApp so the user can immediately dispatch or choose the recipient.
      */
     fun sendWhatsApp(context: Context, contact: String, messageText: String? = null): WhatsAppResult {
-        AssistantLogger.i(TAG, "Triggering WhatsApp intent for contact: '$contact', message: '$messageText'")
+        AssistantLogger.i(TAG, "Opening WhatsApp compose intent")
         val cleanContact = contact.trim()
         val textToSend = messageText?.trim() ?: ""
 
@@ -113,7 +113,7 @@ object WhatsAppManager {
                 }
             }
         } catch (e: Exception) {
-            AssistantLogger.w(TAG, "WhatsApp intent failed: ${e.message}")
+            AssistantLogger.w(TAG, "WhatsApp intent failed")
             WhatsAppResult(
                 success = false,
                 spokenMessage = "Could not open WhatsApp for $cleanContact.",

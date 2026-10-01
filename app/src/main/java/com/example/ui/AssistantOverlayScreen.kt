@@ -126,6 +126,7 @@ fun AssistantOverlayScreen(
     viewModel: ChatViewModel,
     onBack: () -> Unit,
     onOpenSettings: () -> Unit = {},
+    assistantInvocationToken: Int = 0,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -140,7 +141,6 @@ fun AssistantOverlayScreen(
     val voiceState by viewModel.voiceState.collectAsState()
     val liveTranscription by viewModel.liveTranscription.collectAsState()
     val audioRmsLevel by viewModel.audioRmsLevel.collectAsState()
-    val isWakeWordEnabled by AppSettingsManager.isWakeWordEnabled.collectAsState()
 
     // System Telemetry & Memory
     val isNetworkAvailable by viewModel.isNetworkAvailable.collectAsState()
@@ -171,6 +171,10 @@ fun AssistantOverlayScreen(
         hasMicPermission = isGranted
         if (isGranted) {
             viewModel.startListening()
+        } else {
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar("Microphone permission is required for voice assistant input.")
+            }
         }
     }
 
@@ -290,6 +294,17 @@ fun AssistantOverlayScreen(
     // Voice manager init
     LaunchedEffect(Unit) {
         viewModel.initVoiceManager(context)
+    }
+
+    LaunchedEffect(assistantInvocationToken) {
+        if (assistantInvocationToken > 0) {
+            viewModel.initVoiceManager(context)
+            if (hasMicPermission) {
+                viewModel.startListening()
+            } else {
+                micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            }
+        }
     }
 
     var textInput by remember { mutableStateOf("") }
@@ -481,15 +496,12 @@ fun AssistantOverlayScreen(
                 } else {
                     val statusText = when {
                         !hasMicPermission -> "Microphone permission required • Tap orb to allow"
-                        voiceState is VoiceState.Listening -> {
-                            val listeningState = voiceState as VoiceState.Listening
-                            if (listeningState.isWakeWordActive) "Listening for 'Hey MJ'..." else "Listening to you..."
-                        }
+                        voiceState is VoiceState.Listening -> "Listening to you..."
                         voiceState is VoiceState.Speaking -> "MJ is speaking • Tap orb to pause"
                         voiceState is VoiceState.Thinking || isProcessing -> "MJ is thinking..."
                         isLowBatteryActive -> "Low Battery Mode • Tap orb to speak"
                         !isNetworkAvailable -> "Offline Mode • Local commands active"
-                        else -> if (isWakeWordEnabled) "Say 'Hey MJ' or tap orb" else "Tap orb to speak"
+                        else -> "Tap orb or use Android's assistant shortcut to speak"
                     }
 
                     Text(

@@ -1,6 +1,5 @@
 package com.example.device
 
-import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.content.Intent
 import android.hardware.camera2.CameraManager
@@ -20,9 +19,7 @@ data class DeviceControlResult(
 object DeviceControlManager {
     private const val TAG = "DeviceControlManager"
 
-    /**
-     * Toggles Wi-Fi or displays the system Wi-Fi / Connectivity panel via Accessibility Service & System Intents.
-     */
+    /** Opens Android's own connectivity controls; Android does not permit apps to silently toggle Wi-Fi. */
     fun toggleWifi(context: Context, turnOn: Boolean? = null): DeviceControlResult {
         AssistantLogger.i(TAG, "Toggling Wi-Fi (requested: $turnOn)")
 
@@ -45,20 +42,7 @@ object DeviceControlManager {
             }
         }
 
-        // 2. Fallback via Accessibility Service Quick Settings pull-down
-        val service = AssistantService.instance
-        if (service != null) {
-            val qsSuccess = service.performGlobal(AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS)
-            if (qsSuccess) {
-                return DeviceControlResult(
-                    success = true,
-                    spokenMessage = "Opening Quick Settings to adjust Wi-Fi.",
-                    details = "Triggered via Accessibility Service."
-                )
-            }
-        }
-
-        // 3. Fallback to standard Wi-Fi settings activity
+        // On versions without the connectivity panel, open Android's Wi-Fi settings.
         val wifiSettingsIntent = Intent(Settings.ACTION_WIFI_SETTINGS).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
@@ -72,14 +56,12 @@ object DeviceControlManager {
             DeviceControlResult(
                 success = false,
                 spokenMessage = "Unable to open Wi-Fi controls.",
-                details = "Failed to launch intent or accessibility action."
+                details = "Failed to launch Android Wi-Fi controls."
             )
         }
     }
 
-    /**
-     * Toggles Bluetooth or displays the system Bluetooth panel via Accessibility Service & System Intents.
-     */
+    /** Opens Android Bluetooth settings; MJ does not toggle the radio through hidden automation. */
     fun toggleBluetooth(context: Context, turnOn: Boolean? = null): DeviceControlResult {
         AssistantLogger.i(TAG, "Toggling Bluetooth (requested: $turnOn)")
 
@@ -100,20 +82,7 @@ object DeviceControlManager {
             )
         }
 
-        // 2. Fallback via Accessibility Service Quick Settings pull-down
-        val service = AssistantService.instance
-        if (service != null) {
-            val qsSuccess = service.performGlobal(AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS)
-            if (qsSuccess) {
-                return DeviceControlResult(
-                    success = true,
-                    spokenMessage = "Opening Quick Settings to adjust Bluetooth.",
-                    details = "Triggered via Accessibility Service."
-                )
-            }
-        }
-
-        // 3. Fallback to Bluetooth settings
+        // Keep the same user-controlled settings route as a fallback.
         val btSettingsIntent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
@@ -132,9 +101,7 @@ object DeviceControlManager {
         }
     }
 
-    /**
-     * Adjusts system screen brightness directly (0-100%) or via Accessibility Quick Settings.
-     */
+    /** Adjusts brightness only with Android's write-settings access, otherwise opens user-controlled settings. */
     fun setBrightness(context: Context, percent: Int): DeviceControlResult {
         val clampedPercent = percent.coerceIn(0, 100)
         AssistantLogger.i(TAG, "Setting screen brightness to $clampedPercent%")
@@ -164,7 +131,7 @@ object DeviceControlManager {
                     details = "Directly modified system screen brightness."
                 )
             } catch (e: Exception) {
-                AssistantLogger.w(TAG, "Failed to write brightness: ${e.message}")
+                AssistantLogger.w(TAG, "Failed to write brightness")
                 fallbackBrightness(context, clampedPercent)
             }
         } else {
@@ -173,19 +140,6 @@ object DeviceControlManager {
     }
 
     private fun fallbackBrightness(context: Context, targetPercent: Int): DeviceControlResult {
-        // Accessibility Quick Settings provides the immediate brightness slider on modern Android
-        val service = AssistantService.instance
-        if (service != null) {
-            val qsSuccess = service.performGlobal(AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS)
-            if (qsSuccess) {
-                return DeviceControlResult(
-                    success = true,
-                    spokenMessage = "Opening Quick Settings to adjust brightness to $targetPercent%.",
-                    details = "Opened Quick Settings slider via Accessibility Service."
-                )
-            }
-        }
-
         // Open Display Settings
         val displayIntent = Intent(Settings.ACTION_DISPLAY_SETTINGS).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -219,7 +173,7 @@ object DeviceControlManager {
      */
     fun openQuickSettings(): DeviceControlResult {
         val service = AssistantService.instance
-        return if (service != null && service.performGlobal(AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS)) {
+        return if (service != null && service.performGlobal(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS)) {
             DeviceControlResult(true, "Opening Quick Settings.")
         } else {
             DeviceControlResult(false, "Accessibility Service is required to open Quick Settings.")
@@ -231,7 +185,7 @@ object DeviceControlManager {
      */
     fun openNotifications(): DeviceControlResult {
         val service = AssistantService.instance
-        return if (service != null && service.performGlobal(AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS)) {
+        return if (service != null && service.performGlobal(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS)) {
             DeviceControlResult(true, "Opening notifications.")
         } else {
             DeviceControlResult(false, "Accessibility Service is required to open notifications.")
@@ -252,7 +206,7 @@ object DeviceControlManager {
                 val msg = if (enable) "Flashlight turned on." else "Flashlight turned off."
                 DeviceControlResult(true, msg)
             } catch (e: Exception) {
-                AssistantLogger.w(TAG, "Flashlight toggle error: ${e.message}")
+                AssistantLogger.w(TAG, "Flashlight toggle failed")
                 DeviceControlResult(false, "Failed to toggle flashlight.")
             }
         }
@@ -282,7 +236,7 @@ object DeviceControlManager {
             context.startActivity(intent)
             true
         } catch (e: Exception) {
-            AssistantLogger.w(TAG, "Failed to launch intent: ${e.message}")
+            AssistantLogger.w(TAG, "Failed to launch system settings intent")
             false
         }
     }

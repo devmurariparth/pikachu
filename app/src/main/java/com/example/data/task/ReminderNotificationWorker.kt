@@ -30,7 +30,7 @@ class ReminderNotificationWorker(
         val taskTitle = inputData.getString(KEY_TASK_TITLE) ?: "Task Reminder"
         val taskDesc = inputData.getString(KEY_TASK_DESC) ?: ""
 
-        AssistantLogger.i("ReminderWorker", "Triggering reminder notification for task #$taskId: '$taskTitle'")
+        AssistantLogger.i("ReminderWorker", "Triggering a task reminder notification")
 
         // Verify task exists and is not already completed
         if (taskId != -1L) {

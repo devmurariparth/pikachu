@@ -2178,16 +2178,97 @@ Required verification:
 5. Multi-step agent planning is structurally prepared, but full autonomous multi-step verification is intentionally limited by Phase 1's requirement that unverified actions cannot unlock subsequent steps.
 6. No background wake-word implementation was added.
 
-## Next Phase
+## PHASE 3 STATUS
 
-**PHASE 3 — System Assistant Integration**
+**IMPLEMENTED LOCALLY; NOT VERIFIED GREEN.** Phase 3 foundation changes are present in the working tree. Android build, lint, unit tests, and emulator instrumentation have not run successfully in this workspace because Java/JDK is missing; see BUILD STATUS. Do not treat this as a completed or released phase.
 
-Only after Phase 2 verification is green:
-- VoiceInteractionService
-- VoiceInteractionSessionService
-- RoleManager assistant role
-- system assistant lifecycle
-- lock-screen assistant behavior where supported
-- official background assistant integration
+### FILES CHANGED
 
-No Phase 3 work has been started.
+Phase 3 implementation and test files in this working tree:
+
+- `app/src/main/AndroidManifest.xml`
+- `app/src/main/res/xml/voice_interaction_service.xml`
+- `app/src/main/res/xml/accessibility_service_config.xml`
+- `app/src/main/java/com/example/voice/AssistantCapabilities.kt`
+- `app/src/main/java/com/example/voice/AssistantStateMachine.kt`
+- `app/src/main/java/com/example/voice/MjVoiceInteractionService.kt`
+- `app/src/main/java/com/example/voice/MjVoiceInteractionSessionService.kt`
+- `app/src/main/java/com/example/voice/SystemAssistantInvocation.kt`
+- `app/src/main/java/com/example/voice/VoiceInteractionManager.kt`
+- `app/src/main/java/com/example/voice/VoiceState.kt`
+- `app/src/main/java/com/example/MainActivity.kt`
+- `app/src/main/java/com/example/ui/AssistantOverlayScreen.kt`
+- `app/src/main/java/com/example/ui/AssistantSetupScreen.kt`
+- `app/src/main/java/com/example/ui/PermissionExplanationCard.kt`
+- `app/src/main/java/com/example/ui/SettingsScreen.kt`
+- `app/src/main/java/com/example/ui/VoiceVisualizer.kt`
+- `app/src/main/java/com/example/viewmodel/ChatViewModel.kt`
+- `app/src/main/java/com/example/agent/AgentPipeline.kt`
+- `app/src/main/java/com/example/agent/LocalIntentRouter.kt`
+- `app/src/main/java/com/example/action/PermissionPolicyGate.kt`
+- `app/src/main/java/com/example/AssistantService.kt`
+- `app/src/main/java/com/example/IntentManager.kt`
+- `app/src/main/java/com/example/device/DeviceControlManager.kt`
+- `app/src/main/java/com/example/AssistantLogger.kt`
+- `app/src/main/java/com/example/ActionPlanner.kt`
+- `app/src/main/java/com/example/ErrorCategory.kt`
+- `app/src/main/java/com/example/OfflineActionHandler.kt`
+- `app/src/main/java/com/example/WhatsAppManager.kt`
+- `app/src/main/java/com/example/contact/CallActionManager.kt`
+- `app/src/main/java/com/example/contact/ContactsManager.kt`
+- `app/src/main/java/com/example/data/AppSettingsManager.kt`
+- `app/src/main/java/com/example/data/UserMemoryManager.kt`
+- `app/src/main/java/com/example/data/task/ReminderNotificationWorker.kt`
+- `app/src/main/java/com/example/data/task/TaskManager.kt`
+- `app/src/main/java/com/example/music/MusicActionManager.kt`
+- `app/src/main/java/com/example/network/NetworkConnectivityManager.kt`
+- `app/src/main/java/com/example/repository/ConnectionManager.kt`
+- `app/src/main/java/com/example/vision/VisionAnalyzer.kt`
+- `app/src/main/java/com/example/ui/DiagnosticsLogsDialog.kt`
+- `app/src/test/java/com/example/AssistantLoggerTest.kt`
+- `app/src/test/java/com/example/action/PermissionPolicyGateTest.kt`
+- `app/src/test/java/com/example/agent/AgentPipelineCancellationTest.kt`
+- `app/src/test/java/com/example/agent/LocalIntentRouterTest.kt`
+- `app/src/test/java/com/example/voice/AssistantCapabilitiesTest.kt`
+- `app/src/test/java/com/example/voice/VoiceInteractionLifecycleTest.kt`
+- `app/src/test/java/com/example/voice/VoiceStateTest.kt`
+- `app/src/androidTest/java/com/example/AssistantInstrumentedTest.kt`
+
+`app/lint-baseline.xml` and `gradlew.bat` were already locally modified before Phase 3 work began and are preserved; they are not attributed to the Phase 3 implementation.
+
+### VOICEINTERACTIONSERVICE STATUS
+
+Declared with `BIND_VOICE_INTERACTION` and service metadata. `MjVoiceInteractionService` only tracks system readiness and performs no microphone capture. A separate `VoiceInteractionSessionService` creates an interaction session on explicit system invocation. The session routes into the existing `MainActivity`/Phase 2 voice pipeline; no duplicate speech or agent pipeline was added.
+
+### ASSISTANT ROLE STATUS
+
+`RoleManager` availability/held-state checks and an Android system-mediated request flow are implemented. Grant, denial, retryable/unknown result, and unavailable states are represented. Android controls role selection; MJ does not change it silently.
+
+### BACKGROUND ASSISTANT STATUS
+
+The system-owned lightweight service has ready/shutdown lifecycle handling. Session work is placed in a separate `:voice_session` process and only created for explicit invocation. Existing assistant invocation can request microphone permission through the app's runtime permission UI. There is no hidden always-on microphone or wake-word listener. Process-death recovery depends on a fresh Android invocation and existing Activity/ViewModel initialization; persistent in-flight commands are not resumed.
+
+### LOCK SCREEN STATUS
+
+Session metadata disables launch from keyguard. The session checks `KeyguardManager.isDeviceLocked` and displays an unlock prompt without launching the app, capturing voice, or executing actions while locked. Actual device/OEM keyguard behavior remains unverified locally.
+
+### CAPABILITY MODEL
+
+`AssistantCapabilityReport` reports voice interaction, assistant role, microphone, notification posting permission, accessibility, contacts, calling, media intents, and Android API support. Each uses `AVAILABLE`, `NEEDS_PERMISSION`, `NEEDS_ROLE`, `UNSUPPORTED`, or `BLOCKED`. Notification capability currently means permission to post app notifications; it does not claim privileged access to read other apps' notifications.
+
+### TEST STATUS
+
+Added unit tests for capability states, role outcomes, VoiceInteractionService ready/shutdown/restart, explicit invocation contract, state transition protection, and cancellation. Added instrumentation coverage for voice-service manifest declarations, process separation, capability detection, and invocation routing. Existing normalized cancellation phrases are covered by the language/cancellation tests. **None of these new or existing tests are verified in this environment.**
+
+### BUILD STATUS
+
+**BLOCKED BEFORE GRADLE STARTUP:** `.\gradlew.bat :app:testDebugUnitTest --no-daemon` returned `JAVA_HOME is not set and no 'java' command could be found in your PATH`. JDK and Android Studio runtime were not found in the workspace environment. API 26/33/36 emulator images are also absent locally. Unit tests, lint, `assembleDebug`, unsigned `assembleRelease -PallowUnsignedRelease`, and connected API 26/33/36 instrumentation therefore remain unverified. No claim of green status is made.
+
+### KNOWN ANDROID LIMITATIONS
+
+1. Installing/selecting MJ as the default assistant requires Android's user-confirmed role flow and supported device firmware; declaring the service alone does not make it the default.
+2. The app voice interaction path needs microphone permission and a speech-recognition provider when the user invokes it. It does not implement “Hey MJ” or always-on listening.
+3. Launch from keyguard is disabled. The session requires unlocking before opening the app; no action bypasses device authentication.
+4. OEM implementations may vary in assistant invocation and lock-screen presentation. Device verification is outstanding.
+5. The accessibility service remains behind the action policy gate and its configuration does not enable window-content retrieval or gesture automation. Supported platform APIs/intents are preferred.
+6. Full restart recovery resumes only on a new system/app invocation; active planner/action jobs are cancelled with process death and are not persisted.

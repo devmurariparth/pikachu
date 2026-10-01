@@ -100,7 +100,7 @@ fun MicrophonePermissionBanner(
                         color = MaterialTheme.colorScheme.onErrorContainer
                     )
                     Text(
-                        text = "MJ needs microphone permission to listen to your voice commands, detect 'Hey MJ', and converse naturally.",
+                        text = "MJ uses the microphone only after you start voice input or invoke it through Android's assistant role.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.9f)
                     )

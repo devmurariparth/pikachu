@@ -152,11 +152,11 @@ object ActionPlanner {
                 }
 
                 val plannedAction = PlannedAction(action, payload, speech, language)
-                AssistantLogger.i(taskId, "Planned action: $plannedAction")
+                AssistantLogger.i(taskId, "Planned action: ${plannedAction.action}")
                 Result.success(plannedAction)
             }
             is com.example.network.ApiResult.Error -> {
-                AssistantLogger.w(taskId, "API Error: ${apiResult.message}")
+                AssistantLogger.w(taskId, "API request failed: ${apiResult.category}")
                 com.example.GlobalErrorHandler.handleError(apiResult.category, apiResult.message)
                 val canRetry = apiResult.category == ErrorCategory.NETWORK_ERROR || apiResult.category == ErrorCategory.TIMEOUT_ERROR || apiResult.category == ErrorCategory.AI_SERVICE_ERROR
                 Result.failure(AssistantException(apiResult.category, apiResult.message, canRetry = canRetry))

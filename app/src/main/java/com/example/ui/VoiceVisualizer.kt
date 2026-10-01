@@ -104,7 +104,7 @@ fun VoiceVisualizerBar(
 
                         Text(
                             text = when (voiceState) {
-                                is VoiceState.Listening -> if (voiceState.isWakeWordActive) "Listening for 'Hey MJ'..." else "Listening..."
+                                is VoiceState.Listening -> "Listening..."
                                 is VoiceState.Thinking, is VoiceState.Processing -> "Thinking..."
                                 is VoiceState.Executing -> "Working..."
                                 is VoiceState.Cancelled -> "Cancelled"

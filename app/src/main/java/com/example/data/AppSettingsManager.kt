@@ -27,8 +27,6 @@ object AppSettingsManager {
     private const val KEY_DYNAMIC_COLOR = "dynamic_color"
     private const val KEY_CUSTOM_API_KEY = "custom_gemini_api_key"
     private const val KEY_OPENAI_API_KEY = "custom_openai_api_key"
-    private const val KEY_CONTINUOUS_CONVERSATION = "continuous_conversation"
-    private const val KEY_WAKE_WORD_ENABLED = "wake_word_enabled"
     private const val KEY_TTS_ENABLED = "tts_enabled"
     private const val KEY_AUTO_LANGUAGE_ENABLED = "auto_language_enabled"
     private const val KEY_DEFAULT_MUSIC_APP = "default_music_app"
@@ -49,12 +47,6 @@ object AppSettingsManager {
     private val _openAiApiKey = MutableStateFlow("")
     val openAiApiKey: StateFlow<String> = _openAiApiKey.asStateFlow()
     val customApiKey: StateFlow<String> = _customApiKey.asStateFlow()
-
-    private val _isContinuousConversation = MutableStateFlow(true)
-    val isContinuousConversation: StateFlow<Boolean> = _isContinuousConversation.asStateFlow()
-
-    private val _isWakeWordEnabled = MutableStateFlow(true)
-    val isWakeWordEnabled: StateFlow<Boolean> = _isWakeWordEnabled.asStateFlow()
 
     private val _isTtsEnabled = MutableStateFlow(true)
     val isTtsEnabled: StateFlow<Boolean> = _isTtsEnabled.asStateFlow()
@@ -86,8 +78,6 @@ object AppSettingsManager {
         }
         _customApiKey.value = secureSecretStore.get(KEY_CUSTOM_API_KEY)
         _openAiApiKey.value = secureSecretStore.get(KEY_OPENAI_API_KEY)
-        _isContinuousConversation.value = prefs.getBoolean(KEY_CONTINUOUS_CONVERSATION, true)
-        _isWakeWordEnabled.value = prefs.getBoolean(KEY_WAKE_WORD_ENABLED, true)
         _isTtsEnabled.value = prefs.getBoolean(KEY_TTS_ENABLED, true)
         _isAutoLanguageEnabled.value = prefs.getBoolean(KEY_AUTO_LANGUAGE_ENABLED, true)
 
@@ -104,22 +94,6 @@ object AppSettingsManager {
         if (::prefs.isInitialized) {
             prefs.edit().putString(KEY_DEFAULT_MUSIC_APP, app.name).apply()
             AssistantLogger.i("Settings", "Default music app set to ${app.name}")
-        }
-    }
-
-    fun setContinuousConversation(enabled: Boolean) {
-        _isContinuousConversation.value = enabled
-        if (::prefs.isInitialized) {
-            prefs.edit().putBoolean(KEY_CONTINUOUS_CONVERSATION, enabled).apply()
-            AssistantLogger.i("Settings", "Continuous conversation set to $enabled")
-        }
-    }
-
-    fun setWakeWordEnabled(enabled: Boolean) {
-        _isWakeWordEnabled.value = enabled
-        if (::prefs.isInitialized) {
-            prefs.edit().putBoolean(KEY_WAKE_WORD_ENABLED, enabled).apply()
-            AssistantLogger.i("Settings", "Wake word detection set to $enabled")
         }
     }
 

@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -50,6 +52,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.repository.ConnectionManager
+import com.example.voice.AssistantRoleManager
+import com.example.voice.AssistantRoleRequestStatus
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -63,6 +67,19 @@ fun AssistantSetupScreen(
     val scope = rememberCoroutineScope()
     var isTestingConnection by remember { mutableStateOf(false) }
     var connectionStatusText by remember { mutableStateOf<String?>(null) }
+    var assistantRoleStatus by remember { mutableStateOf(AssistantRoleManager.status(context)) }
+    var assistantRoleFeedback by remember { mutableStateOf<String?>(null) }
+    val assistantRoleLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        assistantRoleStatus = AssistantRoleManager.resultAfterRequest(context, result.resultCode)
+        assistantRoleFeedback = when (assistantRoleStatus) {
+            AssistantRoleRequestStatus.GRANTED -> "MJ is now selected as the default assistant."
+            AssistantRoleRequestStatus.DENIED -> "The assistant role was not granted. You can request it again any time."
+            AssistantRoleRequestStatus.NEEDS_REQUEST -> "Android did not confirm the role change. Check the system role selection."
+            AssistantRoleRequestStatus.UNAVAILABLE -> "The assistant role is unavailable on this Android device."
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -139,6 +156,54 @@ fun AssistantSetupScreen(
                             .testTag("open_chat_button")
                     ) {
                         Text("Open Chat Interface")
+                    }
+                }
+            }
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Text(
+                        text = "Android default assistant",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = when (assistantRoleStatus) {
+                            AssistantRoleRequestStatus.GRANTED -> "MJ is your selected assistant. Android controls when it can be invoked."
+                            AssistantRoleRequestStatus.NEEDS_REQUEST -> "Choose MJ through Android's assistant-role confirmation."
+                            AssistantRoleRequestStatus.DENIED -> "The assistant role request was declined."
+                            AssistantRoleRequestStatus.UNAVAILABLE -> "The assistant role is unavailable on this Android version or device."
+                        },
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    assistantRoleFeedback?.let { feedback ->
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(feedback, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        enabled = assistantRoleStatus == AssistantRoleRequestStatus.NEEDS_REQUEST ||
+                            assistantRoleStatus == AssistantRoleRequestStatus.DENIED,
+                        onClick = {
+                            val requestIntent = AssistantRoleManager.createRequestIntent(context)
+                            if (requestIntent != null) assistantRoleLauncher.launch(requestIntent)
+                            else assistantRoleStatus = AssistantRoleManager.status(context)
+                        },
+                        modifier = Modifier.fillMaxWidth().testTag("request_assistant_role_button")
+                    ) {
+                        Text(
+                            when (assistantRoleStatus) {
+                                AssistantRoleRequestStatus.GRANTED -> "Default assistant selected"
+                                AssistantRoleRequestStatus.NEEDS_REQUEST -> "Request default assistant role"
+                                AssistantRoleRequestStatus.DENIED -> "Request role again"
+                                AssistantRoleRequestStatus.UNAVAILABLE -> "Assistant role unavailable"
+                            }
+                        )
                     }
                 }
             }

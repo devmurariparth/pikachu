@@ -34,4 +34,10 @@ class PermissionPolicyGateTest {
         assertTrue(decision is PolicyDecision.Blocked)
         assertTrue((decision as PolicyDecision.Blocked).error.code == ActionErrorCode.POLICY_BLOCKED)
     }
+
+    @Test
+    fun home_uses_the_android_home_intent_without_requiring_accessibility() {
+        val gate = PermissionPolicyGate(context, ActionContext(accessibilityAllowed = false))
+        assertTrue(gate.evaluate(PermissionPolicyGate.policyFor(ActionName.GO_HOME)) is PolicyDecision.Allowed)
+    }
 }

@@ -63,4 +63,14 @@ class AssistantLoggerTest {
         // Most recent entries should be preserved
         assertTrue(logs.last().message.contains("Entry 300"))
     }
+
+    @Test
+    fun throwable_message_is_not_recorded() {
+        val secret = "private-user-prompt-or-api-key"
+        AssistantLogger.e("TestTag", "request failed", IllegalStateException(secret))
+
+        val log = AssistantLogger.logs.value.single()
+        assertFalse(log.message.contains(secret))
+        assertFalse(log.throwableMessage.orEmpty().contains(secret))
+    }
 }

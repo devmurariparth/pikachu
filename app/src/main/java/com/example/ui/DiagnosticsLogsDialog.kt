@@ -154,7 +154,7 @@ fun DiagnosticsLogsDialog(
                         if (isLowBatteryActive) {
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "⚡ Low Battery Optimization: ACTIVE (wake word & visuals throttled)",
+                                text = "⚡ Low Battery Optimization: ACTIVE (visual effects reduced)",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.tertiary,
                                 fontWeight = FontWeight.Bold

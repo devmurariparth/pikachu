@@ -272,7 +272,7 @@ object UserMemoryManager {
         val updated = existingList + newItem
         _memories.value = updated
         saveToDisk(updated)
-        AssistantLogger.i(TAG, "Saved memory: '$cleanText' [${newItem.category}, sensitive=${newItem.isSensitive}]")
+        AssistantLogger.i(TAG, "Saved a user memory [${newItem.category}, sensitive=${newItem.isSensitive}]")
 
         return SaveMemoryResult.Success(
             item = newItem,
@@ -345,7 +345,7 @@ object UserMemoryManager {
             val updated = existing.filter { it.id != matchingItem.id }
             _memories.value = updated
             saveToDisk(updated)
-            AssistantLogger.i(TAG, "Removed memory: '${matchingItem.text}'")
+            AssistantLogger.i(TAG, "Removed a user memory")
             return ForgetMemoryResult.ItemRemoved(
                 item = matchingItem,
                 message = "I've forgotten: \"${matchingItem.text}\"."
@@ -367,7 +367,7 @@ object UserMemoryManager {
         val updated = existing.filter { it.id != id }
         _memories.value = updated
         saveToDisk(updated)
-        AssistantLogger.i(TAG, "Removed memory by ID: $id ('${item.text}')")
+        AssistantLogger.i(TAG, "Removed a user memory by ID")
         return true
     }
 

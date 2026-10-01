@@ -613,8 +613,6 @@ fun SettingsScreen(
             // ==========================================
             // SECTION 3: VOICE & CONVERSATION INTERACTION
             // ==========================================
-            val isContinuousConversation by AppSettingsManager.isContinuousConversation.collectAsState()
-            val isWakeWordEnabled by AppSettingsManager.isWakeWordEnabled.collectAsState()
             val isTtsEnabled by AppSettingsManager.isTtsEnabled.collectAsState()
             val isAutoLanguageEnabled by AppSettingsManager.isAutoLanguageEnabled.collectAsState()
 
@@ -637,66 +635,16 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "Voice Interaction & Wake Word",
+                                text = "Voice Interaction",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Customize wake phrase, continuous flow, and speech output",
+                                text = "Voice capture starts only after a microphone tap or Android assistant invocation.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                    }
-
-                    // Wake Word Toggle
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Wake Phrase Detection ('Hey MJ')",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = "Respond when you say 'Hey MJ' or 'OK MJ'",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = isWakeWordEnabled,
-                            onCheckedChange = { AppSettingsManager.setWakeWordEnabled(it) },
-                            modifier = Modifier.testTag("wake_word_switch")
-                        )
-                    }
-
-                    // Continuous Conversation Toggle
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Continuous Conversation",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = "Keep listening after MJ finishes speaking for hands-free replies",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = isContinuousConversation,
-                            onCheckedChange = { AppSettingsManager.setContinuousConversation(it) },
-                            modifier = Modifier.testTag("continuous_conversation_switch")
-                        )
                     }
 
                     // Text-to-Speech Output Toggle
@@ -1215,7 +1163,7 @@ fun SettingsScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = "⚡ Low battery optimization active. Background wake-word polling & heavy visual effects are throttled to preserve power.",
+                                text = "⚡ Low battery optimization active. Heavy visual effects are throttled to preserve power.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onTertiaryContainer,
                                 modifier = Modifier.padding(10.dp)

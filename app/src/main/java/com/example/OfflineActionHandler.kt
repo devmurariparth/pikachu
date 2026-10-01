@@ -79,7 +79,7 @@ object OfflineActionHandler {
         val raw = query.trim()
         val normalized = normalizeCommand(raw)
         val lower = normalized.lowercase()
-        AssistantLogger.i(TAG, "Processing offline query: raw='$raw', normalized='$normalized'")
+        AssistantLogger.i(TAG, "Processing an offline command")
 
         // 0. Direct Music Command ("play believer", "play shape of you on spotify", "listen to believer")
         val musicCommand = com.example.music.MusicActionManager.parseMusicCommand(normalized)
@@ -551,7 +551,7 @@ object OfflineActionHandler {
                 cameraManager.setTorchMode(cameraId, enabled)
                 true
             } catch (e: Exception) {
-                AssistantLogger.w(TAG, "Flashlight error: ${e.message}")
+                AssistantLogger.w(TAG, "Flashlight action failed")
                 false
             }
         }
@@ -576,7 +576,7 @@ object OfflineActionHandler {
             context.startActivity(intent)
             true
         } catch (e: Exception) {
-            AssistantLogger.w(TAG, "Failed to start activity: ${e.message}")
+            AssistantLogger.w(TAG, "Could not start requested activity")
             false
         }
     }

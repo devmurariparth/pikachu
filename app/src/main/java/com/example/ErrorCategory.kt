@@ -21,6 +21,6 @@ class AssistantException(
 
 object GlobalErrorHandler {
     fun handleError(category: ErrorCategory, message: String) {
-        AssistantLogger.e("ERROR_HANDLER", "Category: $category, Message: $message")
+        AssistantLogger.e("ERROR_HANDLER", "Category: $category")
     }
 }
