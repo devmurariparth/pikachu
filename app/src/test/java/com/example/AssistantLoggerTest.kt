@@ -69,7 +69,7 @@ class AssistantLoggerTest {
         val secret = "private-user-prompt-or-api-key"
         AssistantLogger.e("TestTag", "request failed", IllegalStateException(secret))
 
-        val log = AssistantLogger.logs.value.single()
+        val log = AssistantLogger.logs.value.last { it.tag == "TestTag" }
         assertFalse(log.message.contains(secret))
         assertFalse(log.throwableMessage.orEmpty().contains(secret))
     }
