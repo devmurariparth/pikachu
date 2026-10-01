@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import com.example.AssistantService
 
@@ -61,7 +62,7 @@ object AssistantCapabilityDetector {
         val packageManager = appContext.packageManager
         val apiLevel = Build.VERSION.SDK_INT
         val roleManager = if (apiLevel >= Build.VERSION_CODES.Q) {
-            appContext.getSystemService(RoleManager::class.java)
+            getRoleManager(appContext)
         } else null
         val voiceServiceDeclared = runCatching {
             packageManager.resolveService(
@@ -107,6 +108,10 @@ object AssistantCapabilityDetector {
             )
         )
     }
+
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun getRoleManager(context: Context): RoleManager? =
+        context.getSystemService(RoleManager::class.java)
 
     fun evaluate(facts: AssistantCapabilityFacts): AssistantCapabilityReport {
         fun status(state: CapabilityState, detail: String) = CapabilityStatus(state, detail)
