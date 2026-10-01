@@ -177,6 +177,7 @@ enum class AssistantRoleRequestStatus { GRANTED, NEEDS_REQUEST, DENIED, UNAVAILA
 object AssistantRoleManager {
     private const val ROLE_ASSISTANT = "android.app.role.ASSISTANT"
 
+    @SuppressLint("NewApi") // Android 10 role APIs are reached only after the SDK guard.
     fun status(context: Context): AssistantRoleRequestStatus {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return AssistantRoleRequestStatus.UNAVAILABLE
         val roleManager = context.getSystemService(RoleManager::class.java)
@@ -196,6 +197,7 @@ object AssistantRoleManager {
         else -> AssistantRoleRequestStatus.NEEDS_REQUEST
     }
 
+    @SuppressLint("NewApi") // Role request flow is only offered when status confirms Android 10+ support.
     fun createRequestIntent(context: Context): Intent? {
         if (status(context) != AssistantRoleRequestStatus.NEEDS_REQUEST) return null
         return runCatching {
@@ -203,6 +205,7 @@ object AssistantRoleManager {
         }.getOrNull()
     }
 
+    @SuppressLint("NewApi") // Role state is queried only after the SDK version check.
     fun resultAfterRequest(context: Context, resultCode: Int): AssistantRoleRequestStatus {
         val roleManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             context.getSystemService(RoleManager::class.java)
