@@ -10,8 +10,8 @@ data class NormalizedCommand(
 )
 
 object LanguageNormalizer {
-    private val gujarati = Regex("[\u0A80-\u0AFF]")
-    private val devanagari = Regex("[\u0900-\u097F]")
+    private val gujarati = Regex("""[\u0A80-\u0AFF]""")
+    private val devanagari = Regex("""[\u0900-\u097F]""")
     private val latin = Regex("[A-Za-z]")
     private val guWords = setOf("kholo","khol","muk","muki","kari","kar","de","nu","ne","ane","hamna","kaale","savare","vage","vagye","bandh","rok")
     private val hiWords = setOf("khol","kholo","lagao","laga","do","abhi","kal","subah","baje","aur","band","roko","ruko")
@@ -23,7 +23,7 @@ object LanguageNormalizer {
         val hasHi = devanagari.containsMatchIn(original)
         val hasLatin = latin.containsMatchIn(original)
         val lower = original.lowercase()
-        val guScore = if (hasGu) 4 else lower.split(Regex("\s+")).count { it in guWords }
+        val guScore = if (hasGu) 4 else lower.split(Regex("""\s+""")).count { it in guWords }
         val hiScore = if (hasHi) 4 else lower.split(Regex("\s+")).count { it in hiWords }
         val language = when {
             guScore > hiScore && guScore > 0 -> SupportedLanguage.GUJARATI
