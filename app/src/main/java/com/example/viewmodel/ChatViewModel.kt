@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.AssistantService
 import com.example.AssistantLogger
 import com.example.action.ActionContext
+import com.example.action.ActionRequest
 import com.example.action.ActionResult
 import com.example.action.ActionRuntime
 import com.example.agent.AgentPipeline

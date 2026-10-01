@@ -77,6 +77,7 @@ class PermissionPolicyGate(
             ActionName.SET_TIMER, ActionName.PLAY_MUSIC, ActionName.CREATE_TASK,
             ActionName.COMPLETE_TASK, ActionName.REMEMBER_PREFERENCE,
             ActionName.SHOW_MEMORIES, ActionName.FORGET_MEMORY, ActionName.CHAT -> ActionPolicy()
+            ActionName.GO_HOME -> ActionPolicy()
             ActionName.GO_BACK, ActionName.OPEN_NOTIFICATIONS,
             ActionName.RECENT_APPS, ActionName.OPEN_QUICK_SETTINGS -> ActionPolicy(
                 accessibilityUse = AccessibilityUse.LIMITED_GLOBAL_NAVIGATION

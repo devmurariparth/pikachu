@@ -3,6 +3,8 @@ package com.example.agent
 import android.content.Context
 import com.example.PlannedAction
 import com.example.action.ActionContext
+import com.example.action.ActionParameters
+import com.example.action.ActionRequest
 import com.example.action.ActionResult
 import com.example.action.ActionRuntime
 import com.example.action.PlannedActionMapper
