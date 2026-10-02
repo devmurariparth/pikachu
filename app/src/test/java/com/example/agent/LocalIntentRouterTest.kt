@@ -71,6 +71,51 @@ class LocalIntentRouterTest {
         assertEquals(LocalRoute.FallbackToAi, LocalIntentRouter.route("Explain quantum computing"))
     }
 
+    @Test fun song_play_uses_local_music_route() {
+        val route = handled("Play Believer")
+        assertEquals(ActionName.PLAY_MUSIC, route.request.name)
+        assertEquals("Believer", (route.request.parameters as ActionParameters.PlayMusic).query)
+    }
+
+    @Test fun explicit_spotify_song_stays_on_spotify() {
+        val route = handled("Play Believer on Spotify")
+        assertEquals(ActionName.PLAY_MUSIC, route.request.name)
+        assertEquals("Believer on spotify", (route.request.parameters as ActionParameters.PlayMusic).query)
+    }
+
+    @Test fun explicit_video_never_uses_music_route() {
+        val route = handled("Play MrBeast video")
+        assertEquals(ActionName.PLAY_VIDEO, route.request.name)
+        assertEquals("mrbeast", (route.request.parameters as ActionParameters.PlayVideo).query)
+    }
+
+    @Test fun youtube_video_search_uses_video_route() {
+        val route = handled("search YouTube for MrBeast latest video")
+        assertEquals(ActionName.PLAY_VIDEO, route.request.name)
+    }
+
+    @Test fun generic_search_uses_local_search_route() {
+        val route = handled("search for weather tomorrow")
+        assertEquals(ActionName.SEARCH_WEB, route.request.name)
+        assertEquals("weather tomorrow", (route.request.parameters as ActionParameters.SearchWeb).query)
+    }
+
+    @Test fun whatsapp_message_uses_local_route() {
+        val route = handled("send whatsapp to Mom saying hello")
+        assertEquals(ActionName.SEND_WHATSAPP, route.request.name)
+        assertEquals("Mom|hello", (route.request.parameters as ActionParameters.SendWhatsApp).targetAndMessage)
+    }
+
+    @Test fun gujarati_song_uses_local_music_route() {
+        val route = handled("ગીત વગાડો Believer")
+        assertEquals(ActionName.PLAY_MUSIC, route.request.name)
+    }
+
+    @Test fun hindi_video_uses_local_video_route() {
+        val route = handled("वीडियो चलाओ MrBeast")
+        assertEquals(ActionName.PLAY_VIDEO, route.request.name)
+    }
+
     @Test fun timer_uses_local_path() {
         val route = handled("set a timer for 5 minutes")
         assertEquals(ActionName.SET_TIMER, route.request.name)
