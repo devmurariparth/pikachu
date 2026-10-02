@@ -74,7 +74,7 @@ class PermissionPolicyGate(
             ActionName.SEND_SMS -> ActionPolicy()
             ActionName.OPEN_APP, ActionName.OPEN_URL, ActionName.SEARCH_WEB,
             ActionName.OPEN_SETTINGS, ActionName.NAVIGATE, ActionName.SET_ALARM,
-            ActionName.SET_TIMER, ActionName.PLAY_MUSIC, ActionName.CREATE_TASK,
+            ActionName.SET_TIMER, ActionName.PLAY_MUSIC, ActionName.PLAY_VIDEO, ActionName.CREATE_TASK,
             ActionName.COMPLETE_TASK, ActionName.REMEMBER_PREFERENCE,
             ActionName.SHOW_MEMORIES, ActionName.FORGET_MEMORY, ActionName.CHAT -> ActionPolicy()
             ActionName.GO_HOME -> ActionPolicy()
