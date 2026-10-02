@@ -55,7 +55,7 @@ object WhatsAppManager {
             else -> null
         } ?: return WhatsAppResult(false, "WhatsApp is not installed on this device.", cleanContact, textToSend)
 
-        var phoneNumber: String? = cleanContact.takeIf { it.matches("^\\\\+?[0-9]{7,15}$".toRegex()) }
+        var phoneNumber: String? = cleanContact.takeIf { it.matches("^\\+?[0-9]{7,15}$".toRegex()) }
         var resolvedName = cleanContact
 
         if (phoneNumber == null) {
