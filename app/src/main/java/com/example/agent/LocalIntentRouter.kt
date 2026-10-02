@@ -11,16 +11,17 @@ import java.util.UUID
 sealed interface LocalRoute {
     data class Handled(val request: ActionRequest<out ActionParameters>, val language: String) : LocalRoute
     data object FallbackToAi : LocalRoute
+
+}
+
+object LocalIntentRouter {
     private fun extractYouTubeVideoQuery(q: String): String? {
         val lower = q.lowercase().trim()
-        val musicCue = lower.contains("song") ||
-            lower.contains("music") ||
-            lower.contains("spotify") ||
-            lower.contains("youtube music")
+        val musicCue = lower.contains("song") || lower.contains("music") ||
+            lower.contains("spotify") || lower.contains("youtube music")
         val explicitVideo = lower.contains("video") ||
             lower.startsWith("watch ") ||
-            lower.contains("search youtube") ||
-            lower.contains("search on youtube") ||
+            lower.contains("search youtube") || lower.contains("search on youtube") ||
             (lower.contains("youtube") && lower.contains("play") && !musicCue)
         if (!explicitVideo) return null
 
@@ -40,22 +41,18 @@ sealed interface LocalRoute {
             "play the video ",
             "play video ",
             "watch ",
-            "play "
+            "play ",
         )
         prefixes.firstOrNull { query.startsWith(it) }?.let { query = query.removePrefix(it) }
         query = query
             .replace(Regex("""\b(?:on|in)\s+(?:the\s+)?youtube(?:\s+music)?\b"""), " ")
             .replace(Regex("""\b(?:youtube|yt)\b"""), " ")
             .replace(Regex("""\bvideo\b"""), " ")
-            .replace(Regex("""\b(?:please|now|the|a)\b"""), " ")
+            .replace(Regex("""\b(?:of|please|now|the|a|karo|kar)\b"""), " ")
             .replace(Regex("""\s+"""), " ")
             .trim()
         return query.takeIf { it.isNotBlank() }
     }
-
-}
-
-object LocalIntentRouter {
     fun route(text: String): LocalRoute {
         val normalized = LanguageNormalizer.normalize(text)
         val q = normalized.normalized.lowercase()
@@ -91,6 +88,11 @@ object LocalIntentRouter {
         }
         if (q.contains("settings") || q.contains("setting")) return h(ActionName.OPEN_SETTINGS, ActionParameters.OpenSettings)
 
+        // Generic web search is also local; it must not depend on Gemini being reachable.
+        val localSearchQuery = Regex("""^(?:search(?: for)?|google)\s+(.+)$""").matchEntire(q)?.groupValues?.get(1)?.trim()
+        if (!localSearchQuery.isNullOrBlank()) {
+            return h(ActionName.SEARCH_WEB, ActionParameters.SearchWeb(localSearchQuery))
+        }
         // Route explicit YouTube/video requests locally so they never fall through to Spotify AUTO routing.
         extractYouTubeVideoQuery(q)?.let { query ->
             return h(ActionName.PLAY_VIDEO, ActionParameters.PlayVideo(query))
