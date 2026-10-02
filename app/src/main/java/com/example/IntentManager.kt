@@ -35,6 +35,26 @@ object IntentManager {
                     }
                     context.startActivity(intent)
                 }
+                "PLAY_VIDEO" -> {
+                    val query = payload?.trim()?.takeIf { it.isNotEmpty() }
+                        ?: throw AssistantException(ErrorCategory.ACTION_FAILED, "Missing video search query.")
+                    val youtubeUri = Uri.parse("https://www.youtube.com/results")
+                        .buildUpon()
+                        .appendQueryParameter("search_query", query)
+                        .build()
+                    val appIntent = Intent(Intent.ACTION_VIEW, youtubeUri).apply {
+                        setPackage("com.google.android.youtube")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    if (appIntent.resolveActivity(context.packageManager) != null) {
+                        context.startActivity(appIntent)
+                    } else {
+                        val browserIntent = Intent(Intent.ACTION_VIEW, youtubeUri).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(browserIntent)
+                    }
+                }
                 "PLAY_MUSIC", "OPEN_MUSIC" -> {
                     val query = payload ?: throw AssistantException(ErrorCategory.ACTION_FAILED, "Missing song title.")
                     val command = com.example.music.MusicActionManager.parseMusicCommand("play $query")
