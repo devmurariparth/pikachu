@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import com.example.contact.ContactLookupOutcome
+import com.example.contact.ContactsManager
 
 data class WhatsAppResult(
     val success: Boolean,
@@ -40,86 +42,65 @@ object WhatsAppManager {
      * targeting WhatsApp so the user can immediately dispatch or choose the recipient.
      */
     fun sendWhatsApp(context: Context, contact: String, messageText: String? = null): WhatsAppResult {
-        AssistantLogger.i(TAG, "Opening WhatsApp compose intent")
+        AssistantLogger.i(TAG, "Preparing WhatsApp conversation")
         val cleanContact = contact.trim()
-        val textToSend = messageText?.trim() ?: ""
-
-        // Check if contact looks like a phone number (digits with optional leading +)
-        val isPhoneNumber = cleanContact.matches("^\\+?[0-9]{7,15}$".toRegex())
-        val targetPackage = if (isPackageInstalled(context.packageManager, WHATSAPP_PACKAGE)) {
-            WHATSAPP_PACKAGE
-        } else if (isPackageInstalled(context.packageManager, WHATSAPP_BUSINESS_PACKAGE)) {
-            WHATSAPP_BUSINESS_PACKAGE
-        } else {
-            null
+        val textToSend = messageText?.trim().orEmpty()
+        if (cleanContact.isBlank()) {
+            return WhatsAppResult(false, "Please tell me which WhatsApp contact to message.", cleanContact, textToSend)
         }
 
-        return try {
-            if (isPhoneNumber && targetPackage != null) {
-                // Direct WhatsApp conversation URL
-                val cleanPhone = cleanContact.replace("+", "")
-                val uriString = "https://api.whatsapp.com/send?phone=$cleanPhone" +
-                        if (textToSend.isNotEmpty()) "&text=${Uri.encode(textToSend)}" else ""
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uriString)).apply {
-                    setPackage(targetPackage)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                context.startActivity(intent)
-                WhatsAppResult(
-                    success = true,
-                    spokenMessage = "Opening WhatsApp to send message to $cleanContact.",
-                    contact = cleanContact,
-                    messageText = textToSend
-                )
-            } else {
-                // Native share intent targeting WhatsApp
-                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    if (targetPackage != null) {
-                        setPackage(targetPackage)
-                    }
-                    if (textToSend.isNotEmpty()) {
-                        putExtra(Intent.EXTRA_TEXT, textToSend)
-                    }
-                    putExtra("android.intent.extra.TEXT", textToSend)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
+        val targetPackage = when {
+            isPackageInstalled(context.packageManager, WHATSAPP_PACKAGE) -> WHATSAPP_PACKAGE
+            isPackageInstalled(context.packageManager, WHATSAPP_BUSINESS_PACKAGE) -> WHATSAPP_BUSINESS_PACKAGE
+            else -> null
+        } ?: return WhatsAppResult(false, "WhatsApp is not installed on this device.", cleanContact, textToSend)
 
-                if (targetPackage != null) {
-                    context.startActivity(shareIntent)
-                    val spoken = if (textToSend.isNotEmpty()) {
-                        "Opening WhatsApp to send \"$textToSend\" to $cleanContact."
-                    } else {
-                        "Opening WhatsApp for $cleanContact."
-                    }
-                    WhatsAppResult(
-                        success = true,
-                        spokenMessage = spoken,
-                        contact = cleanContact,
-                        messageText = textToSend
-                    )
-                } else {
-                    // Fallback to system share chooser if WhatsApp isn't directly resolved
-                    val chooser = Intent.createChooser(shareIntent, "Send WhatsApp to $cleanContact").apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    context.startActivity(chooser)
-                    WhatsAppResult(
-                        success = true,
-                        spokenMessage = "WhatsApp isn't directly installed. Opening share options for $cleanContact.",
-                        contact = cleanContact,
-                        messageText = textToSend
-                    )
+        var phoneNumber: String? = cleanContact.takeIf { it.matches("^\\\\+?[0-9]{7,15}$".toRegex()) }
+        var resolvedName = cleanContact
+
+        if (phoneNumber == null) {
+            when (val outcome = ContactsManager.lookupContact(context, cleanContact)) {
+                is ContactLookupOutcome.SingleMatch -> {
+                    phoneNumber = outcome.entry.phoneNumber
+                    resolvedName = outcome.entry.displayName
                 }
+                is ContactLookupOutcome.MultipleContacts ->
+                    return WhatsAppResult(false, "I found multiple contacts named " + cleanContact + ". Please specify which one.", cleanContact, textToSend)
+                is ContactLookupOutcome.MultipleNumbersForContact ->
+                    return WhatsAppResult(false, "That contact has multiple phone numbers. Please specify the number.", cleanContact, textToSend)
+                is ContactLookupOutcome.PermissionRequired ->
+                    return WhatsAppResult(false, outcome.message, cleanContact, textToSend)
+                is ContactLookupOutcome.ContactHasNoNumber ->
+                    return WhatsAppResult(false, outcome.contactName + " does not have a phone number.", cleanContact, textToSend)
+                is ContactLookupOutcome.DirectNumber -> phoneNumber = outcome.phoneNumber
+                is ContactLookupOutcome.NotFound ->
+                    return WhatsAppResult(false, "I couldn't find WhatsApp contact " + cleanContact + ".", cleanContact, textToSend)
+                is ContactLookupOutcome.Error ->
+                    return WhatsAppResult(false, outcome.message, cleanContact, textToSend)
             }
+        }
+
+        val normalizedPhone = phoneNumber?.filter { it.isDigit() }.takeIf { it != null && it.length in 7..15 }
+            ?: return WhatsAppResult(false, "I couldn't resolve a valid WhatsApp number for " + resolvedName + ".", cleanContact, textToSend)
+
+        return try {
+            val uri = Uri.parse("https://wa.me/" + normalizedPhone).buildUpon().apply {
+                if (textToSend.isNotBlank()) appendQueryParameter("text", textToSend)
+            }.build()
+            val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+                setPackage(targetPackage)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            val spoken = if (textToSend.isNotBlank()) {
+                "Opening WhatsApp chat with " + resolvedName + " with your message ready. Tap Send to send it."
+            } else {
+                "Opening WhatsApp chat with " + resolvedName + "."
+            }
+            WhatsAppResult(true, spoken, resolvedName, textToSend)
         } catch (e: Exception) {
-            AssistantLogger.w(TAG, "WhatsApp intent failed")
-            WhatsAppResult(
-                success = false,
-                spokenMessage = "Could not open WhatsApp for $cleanContact.",
-                contact = cleanContact,
-                messageText = textToSend
-            )
+            AssistantLogger.w(TAG, "WhatsApp conversation intent failed")
+            WhatsAppResult(false, "Could not open WhatsApp chat with " + resolvedName + ".", resolvedName, textToSend)
         }
     }
 
