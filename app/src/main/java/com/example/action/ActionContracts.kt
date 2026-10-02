@@ -5,7 +5,7 @@ import kotlinx.coroutines.Job
 import java.util.concurrent.ConcurrentHashMap
 
 enum class ActionName {
-    OPEN_APP, SEARCH_WEB, OPEN_URL, PLAY_MUSIC, CALL, SEND_SMS, OPEN_SETTINGS,
+    OPEN_APP, SEARCH_WEB, OPEN_URL, PLAY_MUSIC, PLAY_VIDEO, CALL, SEND_SMS, OPEN_SETTINGS,
     NAVIGATE, SET_ALARM, SET_TIMER, GO_HOME, GO_BACK, OPEN_NOTIFICATIONS,
     RECENT_APPS, TOGGLE_WIFI, TOGGLE_BLUETOOTH, SET_BRIGHTNESS, OPEN_QUICK_SETTINGS,
     SEND_WHATSAPP, CREATE_TASK, COMPLETE_TASK, REMEMBER_PREFERENCE, SHOW_MEMORIES,
@@ -17,6 +17,7 @@ sealed interface ActionParameters {
     data class SearchWeb(val query: String) : ActionParameters
     data class OpenUrl(val url: String) : ActionParameters
     data class PlayMusic(val query: String) : ActionParameters
+    data class PlayVideo(val query: String) : ActionParameters
     data class Call(val target: String) : ActionParameters
     data class SendSms(val targetAndMessage: String) : ActionParameters
     data object OpenSettings : ActionParameters
