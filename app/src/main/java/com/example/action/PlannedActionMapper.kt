@@ -17,6 +17,7 @@ object PlannedActionMapper {
             ActionName.SEARCH_WEB -> ActionParameters.SearchWeb(plan.payload ?: return invalid("Missing search query."))
             ActionName.OPEN_URL -> ActionParameters.OpenUrl(plan.payload ?: return invalid("Missing URL."))
             ActionName.PLAY_MUSIC -> ActionParameters.PlayMusic(plan.payload ?: return invalid("Missing music query."))
+            ActionName.PLAY_VIDEO -> ActionParameters.PlayVideo(plan.payload ?: return invalid("Missing video query."))
             ActionName.CALL -> ActionParameters.Call(plan.payload ?: return invalid("Missing call target."))
             ActionName.SEND_SMS -> ActionParameters.SendSms(plan.payload ?: return invalid("Missing SMS payload."))
             ActionName.OPEN_SETTINGS -> ActionParameters.OpenSettings
