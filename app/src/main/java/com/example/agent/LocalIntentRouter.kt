@@ -3,12 +3,56 @@ package com.example.agent
 import com.example.action.ActionName
 import com.example.action.ActionParameters
 import com.example.action.ActionRequest
+import com.example.WhatsAppManager
+import com.example.music.MusicActionManager
 import com.example.voice.LanguageNormalizer
 import java.util.UUID
 
 sealed interface LocalRoute {
     data class Handled(val request: ActionRequest<out ActionParameters>, val language: String) : LocalRoute
     data object FallbackToAi : LocalRoute
+    private fun extractYouTubeVideoQuery(q: String): String? {
+        val lower = q.lowercase().trim()
+        val musicCue = lower.contains("song") ||
+            lower.contains("music") ||
+            lower.contains("spotify") ||
+            lower.contains("youtube music")
+        val explicitVideo = lower.contains("video") ||
+            lower.startsWith("watch ") ||
+            lower.contains("search youtube") ||
+            lower.contains("search on youtube") ||
+            (lower.contains("youtube") && lower.contains("play") && !musicCue)
+        if (!explicitVideo) return null
+
+        var query = lower
+        val prefixes = listOf(
+            "open youtube and search for ",
+            "open youtube and search ",
+            "search on youtube for ",
+            "search youtube for ",
+            "search on youtube ",
+            "search youtube ",
+            "find on youtube ",
+            "find youtube ",
+            "open youtube and play ",
+            "watch the video ",
+            "watch video ",
+            "play the video ",
+            "play video ",
+            "watch ",
+            "play "
+        )
+        prefixes.firstOrNull { query.startsWith(it) }?.let { query = query.removePrefix(it) }
+        query = query
+            .replace(Regex("""\b(?:on|in)\s+(?:the\s+)?youtube(?:\s+music)?\b"""), " ")
+            .replace(Regex("""\b(?:youtube|yt)\b"""), " ")
+            .replace(Regex("""\bvideo\b"""), " ")
+            .replace(Regex("""\b(?:please|now|the|a)\b"""), " ")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+        return query.takeIf { it.isNotBlank() }
+    }
+
 }
 
 object LocalIntentRouter {
@@ -46,6 +90,35 @@ object LocalIntentRouter {
             return h(ActionName.SET_BRIGHTNESS, ActionParameters.SetBrightness(percent))
         }
         if (q.contains("settings") || q.contains("setting")) return h(ActionName.OPEN_SETTINGS, ActionParameters.OpenSettings)
+
+        // Route explicit YouTube/video requests locally so they never fall through to Spotify AUTO routing.
+        extractYouTubeVideoQuery(q)?.let { query ->
+            return h(ActionName.PLAY_VIDEO, ActionParameters.PlayVideo(query))
+        }
+
+        // Common WhatsApp commands should work without the cloud planner.
+        WhatsAppManager.parseWhatsAppVoiceCommand(q)?.let { (contact, message) ->
+            val payload = if (message.isNullOrBlank()) contact else "$contact|$message"
+            return h(ActionName.SEND_WHATSAPP, ActionParameters.SendWhatsApp(payload))
+        }
+
+        // Common song playback is also a local fast path; preserve an explicitly requested platform.
+        MusicActionManager.parseMusicCommand(q)?.let { command ->
+            val platformSuffix = when (command.platform) {
+                com.example.music.MusicPlatform.SPOTIFY -> " on spotify"
+                com.example.music.MusicPlatform.YOUTUBE_MUSIC -> " on youtube music"
+                com.example.music.MusicPlatform.YOUTUBE -> " on youtube"
+                else -> ""
+            }
+            val query = buildString {
+                append(command.song.trim())
+                command.artist?.takeIf { it.isNotBlank() }?.let { append(" by ").append(it.trim()) }
+                append(platformSuffix)
+            }.trim()
+            if (query.isNotBlank()) {
+                return h(ActionName.PLAY_MUSIC, ActionParameters.PlayMusic(query))
+            }
+        }
 
         // App-first and verb-first forms share the same route after language normalization.
         val appPatterns = listOf(
