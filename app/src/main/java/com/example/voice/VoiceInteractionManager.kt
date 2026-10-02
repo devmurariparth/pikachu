@@ -34,6 +34,8 @@ class VoiceInteractionManager(
 
     private var speechRecognizer: SpeechRecognizer? = null
     private var listening = false
+    @Volatile
+    private var destroyed = false
     private val stateMachine = AssistantStateMachine()
 
     private val _voiceState = MutableStateFlow<VoiceState>(VoiceState.Idle)
@@ -65,11 +67,13 @@ class VoiceInteractionManager(
 
     private fun createRecognizerSafely() {
         mainHandler.post {
+            if (destroyed) return@post
             createRecognizerOnMainThread()
         }
     }
 
     private fun createRecognizerOnMainThread() {
+        if (destroyed) return
         runCatching {
             if (!SpeechRecognizer.isRecognitionAvailable(appContext)) {
                 publishState(VoiceState.Error("Speech recognition is not available on this device.", retryable = false))
@@ -86,6 +90,7 @@ class VoiceInteractionManager(
     }
 
     fun startListening() {
+        if (destroyed) return
         interrupt()
         if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             publishState(VoiceState.Error(
@@ -171,6 +176,7 @@ class VoiceInteractionManager(
     }
 
     fun speak(text: String, languageCode: String = "en", onDone: (() -> Unit)? = null) {
+        if (destroyed) return
         if (!AppSettingsManager.isTtsEnabled.value) {
             publishState(VoiceState.Idle)
             onDone?.invoke()
@@ -185,6 +191,7 @@ class VoiceInteractionManager(
             language = languageCode,
             onDone = {
                 mainHandler.post {
+                    if (destroyed) return@post
                     _isTtsSpeaking.value = false
                     if (_voiceState.value is VoiceState.Speaking) publishState(VoiceState.Idle)
                     onDone?.invoke()
@@ -192,6 +199,7 @@ class VoiceInteractionManager(
             },
             onError = {
                 mainHandler.post {
+                    if (destroyed) return@post
                     _isTtsSpeaking.value = false
                     publishState(VoiceState.Error(
                         "Text-to-speech is unavailable for this language on this device.",
@@ -310,6 +318,8 @@ class VoiceInteractionManager(
     }
 
     fun destroy() {
+        if (destroyed) return
+        destroyed = true
         pause()
         mainHandler.removeCallbacksAndMessages(null)
         runCatching { speechRecognizer?.destroy() }
