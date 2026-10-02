@@ -162,7 +162,9 @@ object VisionAnalyzer {
                     systemInstruction = Content(
                         parts = listOf(Part(text = systemPrompt))
                     ),
-                    generationConfig = com.example.network.GenerationConfig(temperature = 0.2f)
+                    generationConfig = com.example.network.GenerationConfig(
+                        thinkingConfig = com.example.network.ThinkingConfig(thinkingLevel = "low")
+                    )
                 )
 
                 RetrofitClient.service.generateVisionContent(

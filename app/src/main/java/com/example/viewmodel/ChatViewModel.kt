@@ -10,6 +10,7 @@ import com.example.action.ActionRequest
 import com.example.action.ActionResult
 import com.example.action.ActionRuntime
 import com.example.agent.AgentPipeline
+import com.example.agent.AiProviderException
 import com.example.agent.AiProviderId
 import com.example.agent.AiProviderRouter
 import com.example.agent.GeminiAiProvider
@@ -848,7 +849,8 @@ class ChatViewModel : ViewModel() {
                         )
                         voiceManager?.speak(offlineFallback.spokenResponse)
                     } else {
-                        val friendlyError = "I couldn't reach the AI service. You can still launch apps, adjust device settings, set alarms, or ask 'What do you remember?' offline."
+                        val friendlyError = (commandResult.exceptionOrNull() as? AiProviderException)?.message
+                            ?: "I couldn't reach the AI service. You can still launch apps, adjust device settings, set alarms, or ask 'What do you remember?' offline."
                         _messages.value = _messages.value + ChatMessage(
                             sender = MessageSender.AI,
                             text = friendlyError,

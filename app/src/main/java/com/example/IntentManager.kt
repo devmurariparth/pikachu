@@ -64,6 +64,16 @@ object IntentManager {
                         throw AssistantException(ErrorCategory.ACTION_FAILED, result.spokenResponse)
                     }
                 }
+                "PLAY_VIDEO" -> {
+                    val query = payload ?: throw AssistantException(ErrorCategory.ACTION_FAILED, "Missing video search query.")
+                    val intent = Intent(
+                        Intent.ACTION_VIEW,
+                        Uri.parse("https://www.youtube.com/results?search_query=${Uri.encode(query)}")
+                    ).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                }
                 "CALL" -> {
                     val target = payload ?: throw AssistantException(ErrorCategory.ACTION_FAILED, "Missing contact or phone number.")
                     when (val outcome = com.example.contact.ContactsManager.lookupContact(context, target)) {

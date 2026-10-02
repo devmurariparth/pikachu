@@ -1,167 +1,99 @@
 package com.example
 
-import com.example.network.Content
-import com.example.network.GenerateContentRequest
-import com.example.network.Part
-import com.example.network.RetrofitClient
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
+import com.example.action.ActionName
+import com.example.agent.AiModelConfig
+import com.example.network.InteractionGenerationConfig
+import com.example.network.InteractionRequest
+import com.example.network.InteractionResponseFormat
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
 
-data class PlannedAction(
-    val action: String,
-    val payload: String?,
-    val speechResponse: String,
-    val language: String = "en"
-)
-
+/** Builds stateless Gemini planner interactions. Response validation lives in StructuredActionParser. */
 object ActionPlanner {
     private val systemPrompt = """
-        You are MJ, a next-generation Android AI Assistant built for production use. Your identity is permanently MJ. Never rename yourself.
-        Your mission is to provide the fastest, smartest, most reliable Android assistant experience possible while respecting Android security, permissions, privacy, and platform limitations.
+        You are MJ, an Android assistant action planner. Return exactly one JSON object with these fields:
+        {"action":"SUPPORTED_ACTION","payload":"string or null","speech":"concise user-facing response","lang":"gu|hi|en"}.
 
-        Determine the user's intent and output exactly ONE JSON object (and nothing else, no markdown) containing the following fields:
-        {
-          "action": "<ACTION_TYPE>",
-          "payload": "<REQUIRED_DATA>",
-          "speech": "<NATURAL_SPOKEN_RESPONSE>",
-          "lang": "<TWO_LETTER_ISO_LANGUAGE_CODE>"
-        }
-        
-        ACTION_TYPE can be:
-        - OPEN_APP (payload: android package name like 'com.whatsapp', 'com.instagram.android', 'com.google.android.youtube', 'com.android.chrome')
-        - SEARCH_WEB (payload: the search query)
-        - OPEN_URL (payload: https URL to open in browser)
-        - PLAY_MUSIC (payload: 'song' or 'song by artist' with optional 'on spotify', 'on youtube music', or 'on youtube' suffix; use only for songs/music)
-        - PLAY_VIDEO (payload: video/search query for YouTube or another video request; never use PLAY_MUSIC for videos)
-        - CALL (payload: phone number or contact name)
-        - SEND_SMS (payload: 'contact|message' or 'number|message' - opens SMS app with recipient and text prefilled)
-        - OPEN_SETTINGS (payload: null)
-        - NAVIGATE (payload: destination name)
-        - SET_ALARM (payload: hour in 24h format as string, e.g. "7")
-        - SET_TIMER (payload: duration in minutes as string, e.g. "5")
-        - GO_HOME (payload: null)
-        - GO_BACK (payload: null)
-        - OPEN_NOTIFICATIONS (payload: null)
-        - RECENT_APPS (payload: null)
-        - TOGGLE_WIFI (payload: 'on', 'off', or 'toggle' - for Wi-Fi system control)
-        - TOGGLE_BLUETOOTH (payload: 'on', 'off', or 'toggle' - for Bluetooth system control)
-        - SET_BRIGHTNESS (payload: percentage 0-100 like '80' - for screen brightness control)
-        - OPEN_QUICK_SETTINGS (payload: null - opens system quick settings panel)
-        - SEND_WHATSAPP (payload: 'contact' or 'contact|message' - triggers native share intent for WhatsApp)
-        - CREATE_TASK (payload: 'task title and optional reminder time' - persists task in Room and schedules reminder via WorkManager)
-        - COMPLETE_TASK (payload: 'task title' - marks task done in Room)
-        - REMEMBER_PREFERENCE (payload: the preference or fact user asked you to remember)
-        - SHOW_MEMORIES (payload: null - for queries like 'what do you remember', 'show memories')
-        - FORGET_MEMORY (payload: the item to forget, or 'all'/'everything' to clear all)
-        - CHAT (payload: null - for conversational answers, general queries, or clarification)
-        
-        CRITICAL RULES:
-        1. When asked who or what you are, proudly identify as MJ, the next-generation Android AI Assistant.
-        2. LANGUAGE SUPPORT: MJ supports Gujarati (gu), Hindi (hi), and English (en). Detect Gujarati script, Devanagari, English, transliterated Gujarati/Hindi, and mixed Gujarati-English or Hindi-English commands. Normalize equivalent phrasing to the same action. Always answer in the dominant detected user language and set "lang" to gu, hi, or en. Do not switch to unsupported languages.
-        3. CLARIFICATION FOR UNCLEAR SPEECH: If the user speech is unclear, mumbled, incomplete, or missing critical details (e.g. "call" or "text" with no recipient), use the "CHAT" action and ask for clarification naturally and conversationally in the user's language (e.g., "Who would you like me to call?", "I didn't catch that, could you please repeat?").
-        4. USER-APPROVED MEMORY & PREFERENCES:
-           - Only remember preferences when explicitly asked (e.g., "Remember that I am vegetarian", "Remember my name is Alex", "Please remember I like short answers"). Use REMEMBER_PREFERENCE.
-           - When user asks "What do you remember?", "What are my memories?", or "Show what you remember", use SHOW_MEMORIES.
-           - When user asks "Forget [X]" or "Forget all", use FORGET_MEMORY with the payload matching the item or "all".
-           - NEVER store sensitive credentials (passwords, PINs, bank accounts, credit cards) without explicit consent.
-        5. Keep spoken responses natural, conversational, friendly, and concise.
-        6. If the intent is impossible, unsupported, or unsafe, use "CHAT" and explain clearly while respecting Android platform security and privacy.
-    """.trimIndent()
+        Action and payload rules:
+        - CHAT: conversation, questions, or clarification; payload must be null.
+        - OPEN_APP: package name, only when the user explicitly asks to open an app.
+        - SEARCH_WEB: general web search query. OPEN_URL: an explicitly supplied HTTP(S) URL.
+        - PLAY_MUSIC: song/music query, optionally with artist or requested music app. Never use it for videos.
+        - PLAY_VIDEO: video search query, especially YouTube/watch requests. Never map a video request to PLAY_MUSIC.
+        - CALL: contact name or phone number. SEND_SMS and SEND_WHATSAPP: recipient, optionally recipient|message.
+        - NAVIGATE: destination. SET_ALARM: 24-hour hour from 0 to 23. SET_TIMER: duration in whole minutes.
+        - TOGGLE_WIFI and TOGGLE_BLUETOOTH: on, off, toggle, or open the Android controls. SET_BRIGHTNESS: integer 0-100.
+        - OPEN_SETTINGS, GO_HOME, GO_BACK, OPEN_NOTIFICATIONS, RECENT_APPS, OPEN_QUICK_SETTINGS, SHOW_MEMORIES: null payload.
+        - CREATE_TASK: task details. COMPLETE_TASK: task title. REMEMBER_PREFERENCE: only a user-requested memory.
+        - FORGET_MEMORY: the requested item or all. Memory actions are REMEMBER_PREFERENCE, SHOW_MEMORIES, and FORGET_MEMORY.
+        Supported action names: ${ActionName.entries.joinToString(", ") { it.name }}.
 
-    private fun getCompleteSystemPrompt(): String {
-        val memoryContext = com.example.data.UserMemoryManager.getFormattedMemoriesForContext()
-        return if (memoryContext.isNotEmpty()) {
-            systemPrompt + memoryContext
-        } else {
-            systemPrompt
+        Understand Gujarati script, Hindi/Devanagari, English, transliterated Gujarati, transliterated Hindi,
+        and mixed Gujarati-English or Hindi-English. Preserve the dominant user language in speech and lang.
+        If the request is unclear or lacks required details, use CHAT to ask a concise clarification in the user's language.
+        Only create, complete, or forget memories when the user explicitly requests it. Never store passwords,
+        PINs, payment credentials, or other secrets. Use CHAT for unsafe or unsupported requests.
+        Keep speech concise and conversational.
+        Never claim that an action has succeeded; the Android action runtime performs execution and verification.
+        Do not invent missing details. Use CHAT to ask for clarification.
+        """.trimIndent()
+
+    fun buildRequest(
+        query: String,
+        language: String,
+        model: String = AiModelConfig.PRIMARY_PLANNER
+    ): InteractionRequest {
+        return InteractionRequest(
+            model = model,
+            input = query,
+            systemInstruction = systemInstruction(language),
+            responseFormat = listOf(
+                InteractionResponseFormat(
+                    type = "text",
+                    mimeType = "application/json",
+                    schema = actionResponseSchema()
+                )
+            ),
+            store = false,
+            generationConfig = InteractionGenerationConfig(thinkingLevel = "low")
+        )
+    }
+
+    fun systemInstruction(language: String): String {
+        val memories = com.example.data.UserMemoryManager.getFormattedMemoriesForContext()
+        return buildString {
+            append(systemPrompt)
+            append("\nDetected user language: ")
+            append(language.takeIf { it in SUPPORTED_LANGUAGES } ?: "en")
+            if (memories.isNotBlank()) {
+                append("\n\nUser-approved memory context (use only when relevant):\n")
+                append(memories)
+            }
         }
     }
 
-    suspend fun plan(query: String): Result<PlannedAction> = withContext(Dispatchers.IO) {
-        val taskId = "PLANNER_${System.currentTimeMillis()}"
-        AssistantLogger.i(taskId, "Planning action for request")
-        
-        val apiKey = com.example.data.AppSettingsManager.getActiveApiKey().trim()
-        if (apiKey.isEmpty()) {
-            AssistantLogger.w(taskId, "No Gemini API key configured")
-            return@withContext Result.failure(
-                AssistantException(
-                    ErrorCategory.PERMISSION_ERROR,
-                    "Gemini API key is not configured. Please add your API key in Settings.",
-                    canRetry = false
-                )
-            )
-        }
-
-        val apiResult = com.example.network.safeApiCall {
-            withTimeout(45000L) {
-                val request = GenerateContentRequest(
-                    contents = listOf(Content(parts = listOf(Part(text = query)), role = "user")),
-                    systemInstruction = Content(parts = listOf(Part(text = getCompleteSystemPrompt()))),
-                    generationConfig = com.example.network.GenerationConfig(temperature = 0.2f)
-                )
-                
-                RetrofitClient.service.generateFlashContent(
-                    apiKey = apiKey,
-                    request = request
-                )
-            }
-        }
-        
-        when (apiResult) {
-            is com.example.network.ApiResult.Success -> {
-                val result = apiResult.data
-                val jsonText = result.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text 
-                    ?: return@withContext Result.failure(AssistantException(ErrorCategory.AI_SERVICE_ERROR, "Invalid response from AI.", canRetry = true))
-                
-                AssistantLogger.d(taskId, "AI response received; raw payload omitted from logs")
-                
-                val cleanJson = jsonText.replace("```json", "").replace("```", "").trim()
-
-                var action = "CHAT"
-                var payload: String? = null
-                var speech = "Done."
-                var language = "en"
-
-                val jsonParsed = try {
-                    val firstBrace = cleanJson.indexOf('{')
-                    val lastBrace = cleanJson.lastIndexOf('}')
-                    if (firstBrace != -1 && lastBrace != -1 && lastBrace > firstBrace) {
-                        val jsonSubstring = cleanJson.substring(firstBrace, lastBrace + 1)
-                        val jsonObj = org.json.JSONObject(jsonSubstring)
-                        action = jsonObj.optString("action", "CHAT")
-                        payload = if (jsonObj.isNull("payload")) null else jsonObj.optString("payload").takeIf { it.isNotBlank() && it != "null" }
-                        speech = jsonObj.optString("speech", "Done.")
-                        language = jsonObj.optString("lang", "en").lowercase()
-                        true
-                    } else false
-                } catch (e: Exception) {
-                    false
-                }
-
-                if (!jsonParsed) {
-                    val actionMatch = "\"action\"\\s*:\\s*\"([^\"]+)\"".toRegex().find(cleanJson)
-                    val payloadMatch = "\"payload\"\\s*:\\s*\"([^\"]+)\"".toRegex().find(cleanJson)
-                    val speechMatch = "\"speech\"\\s*:\\s*\"([^\"]+)\"".toRegex().find(cleanJson)
-                    val langMatch = "\"lang\"\\s*:\\s*\"([^\"]+)\"".toRegex().find(cleanJson)
-
-                    action = actionMatch?.groupValues?.get(1) ?: "CHAT"
-                    payload = payloadMatch?.groupValues?.get(1).takeIf { it != "null" && it != "" }
-                    speech = speechMatch?.groupValues?.get(1) ?: "Done."
-                    language = langMatch?.groupValues?.get(1)?.lowercase() ?: "en"
-                }
-
-                val plannedAction = PlannedAction(action, payload, speech, language)
-                AssistantLogger.i(taskId, "Planned action: ${plannedAction.action}")
-                Result.success(plannedAction)
-            }
-            is com.example.network.ApiResult.Error -> {
-                AssistantLogger.w(taskId, "API request failed: ${apiResult.category}")
-                com.example.GlobalErrorHandler.handleError(apiResult.category, apiResult.message)
-                val canRetry = apiResult.category == ErrorCategory.NETWORK_ERROR || apiResult.category == ErrorCategory.TIMEOUT_ERROR || apiResult.category == ErrorCategory.AI_SERVICE_ERROR
-                Result.failure(AssistantException(apiResult.category, apiResult.message, canRetry = canRetry))
-            }
-        }
+    private fun actionResponseSchema() = buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("properties", buildJsonObject {
+            put("action", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("enum", buildJsonArray { ActionName.entries.forEach { add(JsonPrimitive(it.name)) } })
+            })
+            put("payload", buildJsonObject {
+                put("type", JsonArray(listOf(JsonPrimitive("string"), JsonPrimitive("null"))))
+            })
+            put("speech", buildJsonObject { put("type", JsonPrimitive("string")) })
+            put("lang", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("enum", JsonArray(SUPPORTED_LANGUAGES.map { JsonPrimitive(it) }))
+            })
+        })
+        put("required", buildJsonArray {
+            listOf("action", "payload", "speech", "lang").forEach { add(JsonPrimitive(it)) }
+        })
     }
+
+    private val SUPPORTED_LANGUAGES = setOf("gu", "hi", "en")
 }

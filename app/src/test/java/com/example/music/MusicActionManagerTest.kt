@@ -71,6 +71,15 @@ class MusicActionManagerTest {
     }
 
     @Test
+    fun video_requests_are_not_parsed_as_music_but_song_named_video_games_is() {
+        assertNull(MusicActionManager.parseMusicCommand("Play a MrBeast video"))
+        assertNull(MusicActionManager.parseMusicCommand("Watch a YouTube video about space"))
+        assertNull(MusicActionManager.parseMusicCommand("Watch a video about Video Games"))
+        assertEquals("Video Games", MusicActionManager.parseMusicCommand("Play Video Games")?.song)
+        assertEquals(MusicPlatform.YOUTUBE, MusicActionManager.parseMusicCommand("Play Believer on YouTube")?.platform)
+    }
+
+    @Test
     fun testParseMusicCommandWithArtist() {
         val cmd = MusicActionManager.parseMusicCommand("Play Perfect by Ed Sheeran")
         assertNotNull(cmd)

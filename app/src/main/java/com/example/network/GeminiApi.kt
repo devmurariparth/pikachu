@@ -1,5 +1,7 @@
 package com.example.network
 
+import com.example.agent.AiModelConfig
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -9,7 +11,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.POST
-import retrofit2.http.Query
+import retrofit2.http.Header
 
 @Serializable
 data class GenerateContentRequest(
@@ -39,7 +41,6 @@ data class InlineData(
 
 @Serializable
 data class GenerationConfig(
-    val temperature: Float? = null,
     val thinkingConfig: ThinkingConfig? = null
 )
 
@@ -58,24 +59,70 @@ data class Candidate(
     val content: Content
 )
 
+@Serializable
+data class InteractionRequest(
+    val model: String,
+    val input: String,
+    @SerialName("system_instruction") val systemInstruction: String,
+    @SerialName("response_format") val responseFormat: List<InteractionResponseFormat>,
+    val store: Boolean,
+    @SerialName("generation_config") val generationConfig: InteractionGenerationConfig? = null
+)
+
+@Serializable
+data class InteractionResponseFormat(
+    val type: String,
+    @SerialName("mime_type") val mimeType: String,
+    val schema: JsonObject
+)
+
+@Serializable
+data class InteractionGenerationConfig(
+    @SerialName("thinking_level") val thinkingLevel: String
+)
+
+@Serializable
+data class InteractionResponse(
+    @SerialName("output_text") val outputText: String? = null,
+    val steps: List<InteractionStep> = emptyList()
+)
+
+@Serializable
+data class InteractionStep(
+    val type: String,
+    val content: List<InteractionOutputContent> = emptyList()
+)
+
+@Serializable
+data class InteractionOutputContent(
+    val type: String,
+    val text: String? = null
+)
+
 interface GeminiApiService {
-    @POST("v1beta/models/gemini-3.1-pro-preview:generateContent")
+    @POST("v1beta/models/${AiModelConfig.REASONING_FALLBACK}:generateContent")
     suspend fun generateProContent(
-        @Query("key") apiKey: String,
+        @Header("x-goog-api-key") apiKey: String,
         @Body request: GenerateContentRequest
     ): GenerateContentResponse
 
-    @POST("v1beta/models/gemini-2.5-flash:generateContent")
+    @POST("v1beta/models/${AiModelConfig.PRIMARY_PLANNER}:generateContent")
     suspend fun generateFlashContent(
-        @Query("key") apiKey: String,
+        @Header("x-goog-api-key") apiKey: String,
         @Body request: GenerateContentRequest
     ): GenerateContentResponse
 
-    @POST("v1beta/models/gemini-3.6-flash:generateContent")
+    @POST("v1beta/models/${AiModelConfig.PRIMARY_PLANNER}:generateContent")
     suspend fun generateVisionContent(
-        @Query("key") apiKey: String,
+        @Header("x-goog-api-key") apiKey: String,
         @Body request: GenerateContentRequest
     ): GenerateContentResponse
+
+    @POST("v1beta/interactions")
+    suspend fun createInteraction(
+        @Header("x-goog-api-key") apiKey: String,
+        @Body request: InteractionRequest
+    ): InteractionResponse
 }
 
 object RetrofitClient {

@@ -37,6 +37,41 @@ class LocalIntentRouterTest {
         assertEquals(ActionName.OPEN_APP, handled("open YouTube").request.name)
     }
 
+    @Test fun explicit_youtube_music_open_uses_its_own_app_package() {
+        val route = handled("open YouTube Music")
+        assertEquals(ActionName.OPEN_APP, route.request.name)
+        assertEquals("com.google.android.apps.youtube.music", (route.request.parameters as ActionParameters.OpenApp).packageName)
+    }
+
+    @Test fun explicit_spotify_open_is_an_app_launch_not_a_music_search() {
+        val route = handled("open Spotify")
+        assertEquals(ActionName.OPEN_APP, route.request.name)
+        assertEquals("com.spotify.music", (route.request.parameters as ActionParameters.OpenApp).packageName)
+    }
+
+    @Test fun video_search_is_local_and_never_routed_as_music() {
+        val route = handled("play a MrBeast video")
+        assertEquals(ActionName.PLAY_VIDEO, route.request.name)
+        assertEquals("mrbeast", (route.request.parameters as ActionParameters.PlayVideo).query)
+    }
+
+    @Test fun youtube_search_is_a_video_request() {
+        val route = handled("search YouTube for cats")
+        assertEquals(ActionName.PLAY_VIDEO, route.request.name)
+        assertEquals("cats", (route.request.parameters as ActionParameters.PlayVideo).query)
+    }
+
+    @Test fun gujarati_and_hindi_video_commands_stay_on_the_local_route() {
+        assertEquals(ActionName.PLAY_VIDEO, handled("MrBeast નો video બતાવો").request.name)
+        assertEquals(ActionName.PLAY_VIDEO, handled("MrBeast वीडियो दिखाओ").request.name)
+    }
+
+    @Test fun generic_web_search_stays_local() {
+        val route = handled("search the web for android assistant APIs")
+        assertEquals(ActionName.SEARCH_WEB, route.request.name)
+        assertEquals("android assistant apis", (route.request.parameters as ActionParameters.SearchWeb).query)
+    }
+
     @Test fun mixed_gujarati_alarm_uses_local_path() {
         val route = handled("કાલે 8 AM nu alarm set kar")
         assertEquals(ActionName.SET_ALARM, route.request.name)
@@ -87,6 +122,12 @@ class LocalIntentRouterTest {
         val route = handled("Play MrBeast video")
         assertEquals(ActionName.PLAY_VIDEO, route.request.name)
         assertEquals("mrbeast", (route.request.parameters as ActionParameters.PlayVideo).query)
+    }
+
+    @Test fun video_games_song_stays_on_the_music_route() {
+        val route = handled("Play Video Games")
+        assertEquals(ActionName.PLAY_MUSIC, route.request.name)
+        assertEquals("Video Games", (route.request.parameters as ActionParameters.PlayMusic).query)
     }
 
     @Test fun youtube_video_search_uses_video_route() {

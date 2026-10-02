@@ -24,6 +24,14 @@ object MusicActionManager {
      */
     fun parseMusicCommand(rawInput: String): MusicCommand? {
         if (rawInput.isBlank()) return null
+        val explicitVideoIntent = Regex(
+            """(?i)\bwatch\b|\b(?:a\s+|the\s+)?videos?\b(?!\s+games\b)|\bvideos?\s+(?:about|of|on)\b|\bsearch\s+(?:on\s+)?youtube\b|\byoutube\s+videos?\b|વીડિયો|વિડિઓ|वीडियो"""
+        ).containsMatchIn(rawInput)
+        val videoMention = Regex("""(?i)\bvideos?\b|વીડિયો|વિડિઓ|वीडियो""").containsMatchIn(rawInput)
+        val knownSongTitle = Regex("""(?i)\bvideo games\b""").containsMatchIn(rawInput)
+        val explicitVideoGamesSong = knownSongTitle && Regex("""(?i)\b(?:play|listen to|song)\b""")
+            .containsMatchIn(rawInput) && !explicitVideoIntent
+        if (explicitVideoIntent || (videoMention && !explicitVideoGamesSong)) return null
 
         // 1. Normalize whitespace and trailing punctuation
         var cleaned = rawInput.trim()

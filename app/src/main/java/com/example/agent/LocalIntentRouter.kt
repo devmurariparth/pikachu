@@ -15,13 +15,16 @@ sealed interface LocalRoute {
 }
 
 object LocalIntentRouter {
-    private fun extractYouTubeVideoQuery(q: String): String? {
+    private fun extractYouTubeVideoQuery(q: String, explicitMusicRequest: Boolean): String? {
         val lower = q.lowercase().trim()
-        val musicCue = lower.contains("song") || lower.contains("music") ||
+        val musicCue = explicitMusicRequest || lower.contains("song") || lower.contains("music") ||
             lower.contains("spotify") || lower.contains("youtube music")
-        val explicitVideo = lower.contains("video") ||
+        val hasVideoWord = Regex("""\bvideos?\b(?!\s+games\b)|વીડિયો|વિડિઓ|वीडियो""").containsMatchIn(lower)
+        val explicitYouTubeSearch = Regex("""\b(?:search|find)\s+(?:on\s+)?(?:youtube|yt)\b""")
+            .containsMatchIn(lower)
+        val explicitVideo = hasVideoWord ||
             lower.startsWith("watch ") ||
-            lower.contains("search youtube") || lower.contains("search on youtube") ||
+            explicitYouTubeSearch ||
             (lower.contains("youtube") && lower.contains("play") && !musicCue)
         if (!explicitVideo) return null
 
@@ -47,8 +50,10 @@ object LocalIntentRouter {
         query = query
             .replace(Regex("""\b(?:on|in)\s+(?:the\s+)?youtube(?:\s+music)?\b"""), " ")
             .replace(Regex("""\b(?:youtube|yt)\b"""), " ")
-            .replace(Regex("""\bvideo\b"""), " ")
-            .replace(Regex("""\b(?:of|please|now|the|a|karo|kar)\b"""), " ")
+            .replace(Regex("""\bvideos?\b(?!\s+games\b)|વીડિયો|વિડિઓ|वीडियो"""), " ")
+            .replace(Regex("""\b(?:of|please|now|the|a|an|karo|kar|search|find|for|me|show|play|watch)\b"""), " ")
+            .replace(Regex("""(?:નો|ની|ના|ને|માં|પર|બતાવો|દેખાડો|શોધો|वीडियो|चलाओ|दिखाओ|खोजो)"""), " ")
+            .replace(Regex("""[\u0A80-\u0AFF]+"""), " ")
             .replace(Regex("""\s+"""), " ")
             .trim()
         return query.takeIf { it.isNotBlank() }
@@ -88,24 +93,33 @@ object LocalIntentRouter {
         }
         if (q.contains("settings") || q.contains("setting")) return h(ActionName.OPEN_SETTINGS, ActionParameters.OpenSettings)
 
+        val musicCommand = listOf(normalized.original, q)
+            .distinct()
+            .map { it.replace(Regex("""^(?:song|music)\s+play\s+""", RegexOption.IGNORE_CASE), "play ") }
+            .mapNotNull(MusicActionManager::parseMusicCommand)
+            .firstOrNull()
+
+        // Route explicit YouTube/video requests locally so they never fall through to Spotify AUTO routing.
+        extractYouTubeVideoQuery(q, explicitMusicRequest = musicCommand != null)?.let { query ->
+            return h(ActionName.PLAY_VIDEO, ActionParameters.PlayVideo(query))
+        }
         // Generic web search is also local; it must not depend on Gemini being reachable.
-        val localSearchQuery = Regex("""^(?:search(?: for)?|google)\s+(.+)$""").matchEntire(q)?.groupValues?.get(1)?.trim()
+        val localSearchQuery = Regex(
+            """^\s*(?:please\s+)?(?:search\s+(?:the\s+)?web(?:\s+for)?|search\s+for|look\s+up|google)\s+(.+?)(?:\s+online)?[?.!]*\s*$"""
+        ).find(q)?.groupValues?.get(1)?.trim()
         if (!localSearchQuery.isNullOrBlank()) {
             return h(ActionName.SEARCH_WEB, ActionParameters.SearchWeb(localSearchQuery))
         }
-        // Route explicit YouTube/video requests locally so they never fall through to Spotify AUTO routing.
-        extractYouTubeVideoQuery(q)?.let { query ->
-            return h(ActionName.PLAY_VIDEO, ActionParameters.PlayVideo(query))
-        }
 
         // Common WhatsApp commands should work without the cloud planner.
-        WhatsAppManager.parseWhatsAppVoiceCommand(q)?.let { (contact, message) ->
+        (WhatsAppManager.parseWhatsAppVoiceCommand(normalized.original)
+            ?: WhatsAppManager.parseWhatsAppVoiceCommand(q))?.let { (contact, message) ->
             val payload = if (message.isNullOrBlank()) contact else "$contact|$message"
             return h(ActionName.SEND_WHATSAPP, ActionParameters.SendWhatsApp(payload))
         }
 
         // Common song playback is also a local fast path; preserve an explicitly requested platform.
-        MusicActionManager.parseMusicCommand(q)?.let { command ->
+        musicCommand?.let { command ->
             val platformSuffix = when (command.platform) {
                 com.example.music.MusicPlatform.SPOTIFY -> " on spotify"
                 com.example.music.MusicPlatform.YOUTUBE_MUSIC -> " on youtube music"

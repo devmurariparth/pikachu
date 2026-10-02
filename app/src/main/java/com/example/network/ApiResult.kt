@@ -31,9 +31,9 @@ suspend fun <T> safeApiCall(apiCall: suspend () -> T): ApiResult<T> {
         ApiResult.Error(ErrorCategory.TIMEOUT_ERROR, "Request timed out. Please try again.")
     } catch (e: kotlinx.coroutines.CancellationException) {
         throw e
-    } catch (e: IOException) {
-        ApiResult.Error(ErrorCategory.NETWORK_ERROR, "Network Error: ${e.message}")
-    } catch (e: Exception) {
-        ApiResult.Error(ErrorCategory.UNKNOWN_ERROR, "Unexpected error: ${e.message}")
+    } catch (_: IOException) {
+        ApiResult.Error(ErrorCategory.NETWORK_ERROR, "Network error. Check your connection and try again.")
+    } catch (_: Exception) {
+        ApiResult.Error(ErrorCategory.UNKNOWN_ERROR, "The request failed. Please try again.")
     }
 }
