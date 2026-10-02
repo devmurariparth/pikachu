@@ -16,9 +16,12 @@ import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
 
+@RunWith(RobolectricTestRunner::class)
 class GeminiAiProviderTest {
     private class FakeService(
         private val interaction: suspend (InteractionRequest) -> InteractionResponse

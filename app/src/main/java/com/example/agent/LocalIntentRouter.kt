@@ -138,6 +138,7 @@ object LocalIntentRouter {
 
         // App-first and verb-first forms share the same route after language normalization.
         val appPatterns = listOf(
+            "youtube music" to "com.google.android.apps.youtube.music",
             "youtube" to "com.google.android.youtube",
             "yt" to "com.google.android.youtube",
             "chrome" to "com.android.chrome",
