@@ -83,6 +83,7 @@ class ActionRuntime(
         is ActionParameters.SearchWeb -> query
         is ActionParameters.OpenUrl -> url
         is ActionParameters.PlayMusic -> query
+        is ActionParameters.PlayVideo -> query
         is ActionParameters.Call -> target
         is ActionParameters.SendSms -> targetAndMessage
         ActionParameters.OpenSettings -> null
