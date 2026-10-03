@@ -111,6 +111,12 @@ class SmartToolRouter(
         val q = normalized.normalized.lowercase()
         if (q.isBlank()) return RouteDecision.NoMatch(normalized.language.code)
 
+        if (!safeFollowUpContext.isNullOrBlank() && FOLLOW_UP_REFERENCE.containsMatchIn(q) &&
+            !containsAny(q, RoutingPhraseCatalog.call + RoutingPhraseCatalog.message) && !q.contains("whatsapp")) {
+            return RouteDecision.PlannerRequired(normalized.language.code, reason = RouteReason.REASONING_REQUIRED)
+        }
+        if (hasReasoningCue(q)) return RouteDecision.PlannerRequired(normalized.language.code)
+
         if (AMBIGUOUS_REFERENCE.containsMatchIn(q)) {
             val action = when {
                 q.contains("whatsapp") -> ActionName.SEND_WHATSAPP
@@ -122,6 +128,8 @@ class SmartToolRouter(
             }
             val prompt = when {
                 containsAny(q, RoutingPhraseCatalog.play) -> "What would you like me to play?"
+                action == ActionName.CALL -> "Who should I call?"
+                action == ActionName.SEND_WHATSAPP -> "Who should receive the WhatsApp message?"
                 containsAny(q, RoutingPhraseCatalog.message) && !q.contains("whatsapp") -> "Who should receive the message, and should I use SMS or WhatsApp?"
                 else -> "Which item or person do you mean?"
             }
@@ -171,7 +179,7 @@ class SmartToolRouter(
 
         if (hasSearch && hasVideoIntent && !hasYoutube) {
             if (containsAny(q, setOf("find")) && !q.contains("web") && !q.contains("google")) {
-                val query = cleanQuery(q, setOf("find", "a", "the", "video", "videos"))
+                val query = preserveOriginalCase(cleanQuery(q, setOf("find", "a", "the", "video", "videos")), original)
                 return if (query.isBlank()) clarify("Which video should I find?", ActionName.PLAY_VIDEO, language, RouteReason.MISSING_PARAMETER)
                 else candidate(ActionName.PLAY_VIDEO, ActionParameters.PlayVideo(query), language, RouteConfidence.MEDIUM, RouteReason.NATURAL_LANGUAGE_MATCH)
             }
@@ -179,20 +187,20 @@ class SmartToolRouter(
         }
 
         if (hasYoutube && hasSearch && !hasMusicNoun) {
-            val query = cleanQuery(q, setOf("youtube", "yt", "on", "ma", "search", "find", "for", "video", "videos", "kar", "karo", "please"))
+            val query = preserveOriginalCase(cleanQuery(q, setOf("youtube", "yt", "on", "ma", "search", "find", "for", "video", "videos", "kar", "karo", "please")), original)
             return if (query.isBlank()) clarify("What should I search for on YouTube?", ActionName.PLAY_VIDEO, language, RouteReason.MISSING_PARAMETER)
             else candidate(ActionName.PLAY_VIDEO, ActionParameters.PlayVideo(query), language)
         }
 
         // Distinguish a generic web search from a search constrained to YouTube.
         if (hasYoutube && hasVideoIntent && (hasSearch || hasPlayIntent)) {
-            val query = cleanQuery(q, setOf("youtube", "yt", "on", "ma", "search", "find", "for", "video", "videos", "watch", "play", "kar", "karo", "please"))
+            val query = preserveOriginalCase(cleanQuery(q, setOf("youtube", "yt", "on", "ma", "search", "find", "for", "video", "videos", "watch", "play", "kar", "karo", "please")), original)
             return if (query.isBlank()) clarify("What video should I find?", ActionName.PLAY_VIDEO, language, RouteReason.MISSING_PARAMETER)
             else candidate(ActionName.PLAY_VIDEO, ActionParameters.PlayVideo(query), language)
         }
 
         if ((hasPlayIntent || (hasMusicNoun && !hasSearch)) && !hasVideoIntent) {
-            val query = cleanQuery(q, setOf("play", "listen", "song", "songs", "music", "on", "ma", "nu", "no", "ne", "par", "vagado", "vagad", "vagadvo", "bajao", "please", "spotify", "youtube", "youtube music"))
+            val query = preserveOriginalCase(cleanQuery(q, setOf("play", "listen", "song", "songs", "music", "on", "ma", "nu", "no", "ne", "par", "vagado", "vagad", "vagadvo", "bajao", "please", "spotify", "youtube", "youtube music")), original)
             return if (query.isBlank()) clarify("Which song or artist should I play?", ActionName.PLAY_MUSIC, language, RouteReason.MISSING_PARAMETER)
             else candidate(ActionName.PLAY_MUSIC, ActionParameters.PlayMusic(withPlatform(query, q)), language, RouteConfidence.MEDIUM, RouteReason.NATURAL_LANGUAGE_MATCH)
         }
@@ -200,7 +208,7 @@ class SmartToolRouter(
         if (hasMusicNoun && hasSearch && !hasPlayIntent && !hasYoutube) {
             if (q.contains("web") || q.contains("google")) return null
             if (containsAny(q, setOf("find"))) {
-                val query = cleanQuery(q, setOf("find", "a", "the", "song", "music"))
+                val query = preserveOriginalCase(cleanQuery(q, setOf("find", "a", "the", "song", "music")), original)
                 if (query.isNotBlank()) return candidate(ActionName.PLAY_MUSIC, ActionParameters.PlayMusic(query), language, RouteConfidence.MEDIUM, RouteReason.NATURAL_LANGUAGE_MATCH)
                 return clarify("Which song or artist should I play?", ActionName.PLAY_MUSIC, language, RouteReason.MISSING_PARAMETER)
             }
@@ -224,7 +232,7 @@ class SmartToolRouter(
 
         val callIntent = containsAny(q, RoutingPhraseCatalog.call)
         if (callIntent) {
-            val target = cleanQuery(q, setOf("call", "phone", "kar", "karo", "please", "now", "to", "ne", "ko"))
+            val target = preserveOriginalCase(cleanQuery(q, setOf("call", "phone", "kar", "karo", "please", "now", "to", "ne", "ko")), original)
             if (target.isBlank() || target in SENSITIVE_PRONOUNS) {
                 return clarify("Who should I call?", ActionName.CALL, language, RouteReason.MISSING_PARAMETER)
             }
@@ -241,7 +249,7 @@ class SmartToolRouter(
                 if (message != null) return candidate(ActionName.SEND_WHATSAPP, ActionParameters.SendWhatsApp("${parsed.first}|$message"), language, RouteConfidence.MEDIUM, RouteReason.NATURAL_LANGUAGE_MATCH)
                 return clarify("What message should I prepare for ${parsed.first}?", ActionName.SEND_WHATSAPP, language, RouteReason.MISSING_PARAMETER, mapOf("target" to parsed.first))
             }
-            val target = cleanQuery(q, setOf("whatsapp", "message", "msg", "send", "moklo", "mokal", "mokle", "bhejo", "on", "par", "to", "ne", "ko", "please", "now"))
+            val target = preserveOriginalCase(cleanQuery(q, setOf("whatsapp", "message", "msg", "send", "moklo", "mokal", "mokle", "bhejo", "on", "par", "to", "ne", "ko", "please", "now")), original)
             if (target.isBlank() || target.isSensitivePronoun()) {
                 return clarify("Who should receive the WhatsApp message?", ActionName.SEND_WHATSAPP, language, RouteReason.MISSING_PARAMETER)
             }
@@ -379,6 +387,16 @@ class SmartToolRouter(
         .trim()
 
     private fun isCommandFiller(word: String): Boolean = word in FILLER_WORDS
+
+    private fun preserveOriginalCase(value: String, original: String): String {
+        val originalByWord = original
+            .split(Regex("\\s+"))
+            .map { it.trim().trim(',', '.', '?', '!', ':', ';', '\'', '"') }
+            .filter(String::isNotBlank)
+            .associateBy { it.lowercase() }
+        return value.split(Regex("\\s+"))
+            .joinToString(" ") { word -> originalByWord[word.lowercase()] ?: word }
+    }
 
     private fun containsAny(text: String, cues: Set<String>): Boolean = cues.any { cue ->
         Regex("(?:^|\\s)${Regex.escape(cue)}(?:$|\\s)", RegexOption.IGNORE_CASE).containsMatchIn(text)

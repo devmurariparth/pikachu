@@ -25,7 +25,7 @@ class SmartToolRouterTest {
 
     @Test fun english_requests_select_registered_typed_tools() {
         assertEquals("com.spotify.music", (direct("open Spotify", ActionName.OPEN_APP).request.parameters as ActionParameters.OpenApp).packageName)
-        assertEquals("believer", (direct("play Believer", ActionName.PLAY_MUSIC).request.parameters as ActionParameters.PlayMusic).query.substringBefore(" on "))
+        assertEquals("Believer", (direct("play Believer", ActionName.PLAY_MUSIC).request.parameters as ActionParameters.PlayMusic).query.substringBefore(" on "))
         assertEquals(ActionName.PLAY_VIDEO, direct("play Naruto video on YouTube", ActionName.PLAY_VIDEO).request.name)
         assertEquals("cats", (direct("search the web for cats", ActionName.SEARCH_WEB).request.parameters as ActionParameters.SearchWeb).query)
         assertEquals("Mom", (direct("call Mom", ActionName.CALL).request.parameters as ActionParameters.Call).target)
@@ -86,6 +86,9 @@ class SmartToolRouterTest {
         val contextual = router.route("tell me more about it", safeFollowUpContext = "search the web for cats")
         assertTrue(contextual is RouteDecision.PlannerRequired)
         assertFalse(contextual is RouteDecision.DirectTool)
+        assertTrue(router.route("play it", safeFollowUpContext = "play music Believer") is RouteDecision.PlannerRequired)
+        assertTrue(router.route("call her", safeFollowUpContext = "open Spotify") is RouteDecision.ClarificationRequired)
         assertTrue(router.route("nonsense") is RouteDecision.NoMatch)
     }
+
 }
