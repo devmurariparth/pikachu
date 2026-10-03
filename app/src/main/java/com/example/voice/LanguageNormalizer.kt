@@ -52,7 +52,7 @@ object LanguageNormalizer {
     private val wordSplit = Regex("[^\\p{L}\\p{N}]+")
 
     private val gujaratiWords = setOf(
-        "kholo", "khol", "kholje", "vagad", "vagado", "vagadvo", "moklo", "mokal", "mokale", "mokalo", "kar", "karo",
+        "kholo", "khol", "kholje", "vagad", "vagado", "vagadvo", "moklo", "mokal", "mokale", "mokalo", "kar",
         "shodh", "shodho", "karvu", "che", "mare", "maare", "ne", "nu", "ane", "hamna", "gana", "gaana", "samjavo",
         "kaale", "savare", "vage", "vagye", "bandh", "rok", "muk", "muki", "par", "ma"
     )
