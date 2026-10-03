@@ -5,17 +5,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.example.data.AppSettingsManager
@@ -28,6 +28,12 @@ import com.example.ui.AssistantSetupScreen
 import com.example.ui.SettingsScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.viewmodel.ChatViewModel
+
+private enum class AppScreen {
+    CHAT,
+    SETUP,
+    SETTINGS,
+}
 
 data class AssistantErrorEvent(val category: ErrorCategory, val message: String)
 
@@ -49,6 +55,7 @@ class MainActivity : ComponentActivity() {
         UserMemoryManager.init(applicationContext)
         com.example.data.task.TaskManager.init(applicationContext)
         enableEdgeToEdge()
+
         setContent {
             val themePreference by AppSettingsManager.themePreference.collectAsState()
             val isDynamicColor by AppSettingsManager.isDynamicColor.collectAsState()
@@ -67,38 +74,38 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    var currentScreen by remember { mutableStateOf("chat") }
-                    var previousScreen by remember { mutableStateOf("chat") }
+                    var currentScreen by rememberSaveable { mutableStateOf(AppScreen.CHAT) }
+                    var previousScreen by rememberSaveable { mutableStateOf(AppScreen.CHAT) }
                     var errorEvent by remember { mutableStateOf<AssistantErrorEvent?>(null) }
 
                     LaunchedEffect(assistantInvocationToken) {
-                        if (assistantInvocationToken > 0) currentScreen = "chat"
+                        if (assistantInvocationToken > 0) currentScreen = AppScreen.CHAT
                     }
 
                     fun handleGlobalError(category: ErrorCategory, message: String) {
-                        errorEvent = AssistantErrorEvent(category, message)
-                        val formattedError = "${errorEvent?.category?.name}: ${errorEvent?.message}"
-                        AssistantLogger.e("MainActivity", formattedError)
+                        val event = AssistantErrorEvent(category, message)
+                        errorEvent = event
+                        AssistantLogger.e("MainActivity", "${event.category.name}: ${event.message}")
                     }
 
                     when (currentScreen) {
-                        "chat" -> AssistantOverlayScreen(
+                        AppScreen.CHAT -> AssistantOverlayScreen(
                             viewModel = chatViewModel,
                             assistantInvocationToken = assistantInvocationToken,
-                            onBack = { currentScreen = "setup" },
+                            onBack = { currentScreen = AppScreen.SETUP },
                             onOpenSettings = {
-                                previousScreen = "chat"
-                                currentScreen = "settings"
+                                previousScreen = AppScreen.CHAT
+                                currentScreen = AppScreen.SETTINGS
                             }
                         )
-                        "setup" -> AssistantSetupScreen(
-                            onOpenChat = { currentScreen = "chat" },
+                        AppScreen.SETUP -> AssistantSetupScreen(
+                            onOpenChat = { currentScreen = AppScreen.CHAT },
                             onOpenSettings = {
-                                previousScreen = "setup"
-                                currentScreen = "settings"
+                                previousScreen = AppScreen.SETUP
+                                currentScreen = AppScreen.SETTINGS
                             }
                         )
-                        "settings" -> SettingsScreen(
+                        AppScreen.SETTINGS -> SettingsScreen(
                             onBack = { currentScreen = previousScreen }
                         )
                     }
