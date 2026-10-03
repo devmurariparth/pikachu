@@ -2357,7 +2357,7 @@ The router uses deterministic phrases and existing action parsers; free-form rea
 
 ### PHASE 4 STATUS
 
-Implementation is prepared for verification on the current `main` line. The latest pre-Phase-4 main CI was green on commit `526f1656a85a3d700556fcd91fbcb15ff5965ada` (run `37140905112`). That run does not verify Phase 4. Phase 4 remains **PENDING** until a fresh workflow for the Phase 4 implementation commit completes successfully.
+**GREEN AND VERIFIED** on code commit `c2862f5e7221d5e34aad6170fd5e9feedd18357d`; GitHub Actions run `37142709547` completed successfully on that exact commit. Earlier Phase 4 runs found and fixed assertion failures; only this final run is verification evidence.
 
 ### MULTILINGUAL ARCHITECTURE
 
@@ -2376,11 +2376,11 @@ Supported deterministic language labels are Gujarati (`gu`), Hindi (`hi`), and E
 
 ### TEST AND BUILD STATUS
 
-Phase 4 regression tests cover supported-script and transliterated Gujarati/Hindi, mixed-script ambiguity, English preservation, command variants, app/contact/entity preservation, quoted message bodies, URLs, numeric/time values, invalid and unsupported input, routing, required-entity errors, unsafe pronoun clarification, and the existing Phase 1/2/3 suites. The local Windows workspace has no Java runtime (`java` is not available), so no local Gradle result is claimed. The Phase 4 implementation must be considered unverified until the new GitHub Actions run verifies unit tests, lint, debug APK, R8 release, and API 26/33/36 instrumentation.
+Phase 4 regression tests cover supported-script and transliterated Gujarati/Hindi, mixed-script ambiguity, English preservation, command variants, app/contact/entity preservation, quoted message bodies, URLs, numeric/time values, invalid and unsupported input, routing, required-entity errors, unsafe pronoun clarification, and the existing Phase 1/2/3 suites. The local Windows workspace has no Java runtime (`java` is not available), so no local Gradle result is claimed. GitHub Actions run `37142709547` on code commit `c2862f5e7221d5e34aad6170fd5e9feedd18357d` verified all unit tests and the debug APK.
 
 ### BUILD STATUS
 
-**PENDING CI.** The green Phase 3 run is not evidence for Phase 4. Update this section with the exact Phase 4 code commit and new run after the workflow completes; do not mark Phase 4 green in advance.
+**GREEN** on code commit `c2862f5e7221d5e34aad6170fd5e9feedd18357d`, GitHub Actions run `37142709547`. Verified: unit tests, `assembleDebug`, Android lint, unsigned `assembleRelease` with R8/ProGuard, and instrumentation on API 26, 33, and 36. All six configured jobs completed successfully.
 
 ### REMAINING LIMITATIONS
 
