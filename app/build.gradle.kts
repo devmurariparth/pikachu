@@ -10,7 +10,7 @@ plugins {
 }
 
 android {
-  namespace = "com.aistudio.mjassistant.abxyzt"
+  namespace = "com.example"
   compileSdk = 36
 
   defaultConfig {
