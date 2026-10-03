@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 10922)
-Total output lines: 964
-
 package com.example.viewmodel
 
 import android.content.Context
@@ -487,7 +484,87 @@ class ChatViewModel : ViewModel() {
         _pendingSensitiveMemory.value = null
 
         if (consentGiven) {
-            val result = UserM…922 tokens truncated…     cancelCurrentAction()
+            val result = UserMemoryManager.rememberPreference(
+                rawText = pending.candidateText,
+                allowSensitiveIfConsented = true
+            )
+            val msgText = when (result) {
+                is SaveMemoryResult.Success -> "With your explicit consent, I have securely remembered: \"${result.item.text}\"."
+                is SaveMemoryResult.AlreadyExists -> "I already have that preference saved in your memory."
+                is SaveMemoryResult.Disabled -> "Memory is currently disabled in Settings."
+                else -> "Your sensitive preference has been remembered with your explicit consent."
+            }
+            _messages.value = _messages.value + ChatMessage(
+                sender = MessageSender.AI,
+                text = msgText,
+                isMemoryAction = true
+            )
+            voiceManager?.speak(msgText)
+        } else {
+            val msgText = "Discarded. The sensitive data was not saved to memory."
+            _messages.value = _messages.value + ChatMessage(
+                sender = MessageSender.AI,
+                text = msgText,
+                isMemoryAction = true
+            )
+            voiceManager?.speak(msgText)
+        }
+    }
+
+    private fun isWhatDoYouRememberQuery(text: String): Boolean {
+        val lower = text.lowercase().trim()
+        return lower == "what do you remember" ||
+               lower == "what do you remember?" ||
+               lower.startsWith("what do you remember about") ||
+               lower == "what do you know about me" ||
+               lower == "what do you know about me?" ||
+               lower == "show memories" ||
+               lower == "show my memories" ||
+               lower == "list memories" ||
+               lower == "list my memories" ||
+               lower == "what memories do you have" ||
+               lower == "what are my memories" ||
+               lower == "tell me what you remember"
+    }
+
+    private fun isForgetQuery(text: String): Boolean {
+        val lower = text.lowercase().trim()
+        return lower.startsWith("forget ") ||
+               lower == "forget" ||
+               lower.startsWith("delete memory ") ||
+               lower.startsWith("remove memory ") ||
+               lower.startsWith("clear memories") ||
+               lower.startsWith("clear all memories") ||
+               lower == "forget everything" ||
+               lower == "forget all"
+    }
+
+    private fun isRememberQuery(text: String): Boolean {
+        val lower = text.lowercase().trim()
+        return lower.startsWith("remember that ") ||
+               lower.startsWith("remember to ") ||
+               lower.startsWith("remember my ") ||
+               lower.startsWith("remember me as ") ||
+               (lower.startsWith("remember ") && !lower.startsWith("remember?")) ||
+               lower.startsWith("please remember ") ||
+               lower.startsWith("note that ") ||
+               lower.startsWith("keep in mind that ") ||
+               lower.startsWith("don't forget that ") ||
+               lower.startsWith("dont forget that ") ||
+               lower.startsWith("save preference ")
+    }
+
+    private fun localizedLocalSuccess(language: String): String = when (language) {
+        "gu" -> "બરાબર, મેં એ શરૂ કર્યું."
+        "hi" -> "ठीक है, मैंने इसे शुरू कर दिया।"
+        else -> "Okay, I started it."
+    }
+
+    fun sendMessage(context: Context, userText: String, isSpokenInput: Boolean = false) {
+        val trimmed = userText.trim()
+        if (trimmed.isEmpty()) return
+        if (LanguageNormalizer.isCancellation(trimmed)) {
+            cancelCurrentAction()
             val language = LanguageNormalizer.normalize(trimmed).language.code
             val response = when (language) {
                 "gu" -> "બરાબર, મેં ચાલુ કામ રોકી દીધું."
