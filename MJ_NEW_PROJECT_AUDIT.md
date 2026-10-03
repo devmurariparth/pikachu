@@ -2319,7 +2319,7 @@ This addendum tracks the separate Smart Tool Router phase. It does not replace t
 
 ### PHASE 3 STATUS
 
-**IMPLEMENTED LOCALLY; CI VERIFICATION PENDING.** The typed `SmartToolRouter` is integrated before the existing planner/execution pipeline. Do not call this phase complete until a new GitHub Actions run for the Smart Tool Router commit is green.
+**GREEN AND VERIFIED.** The Smart Tool Router implementation is verified on commit `3ecc39d1d29dd95270daad9866d36da753bedeb1` by GitHub Actions run `37138050189`, which completed successfully. Earlier failing router assertions were corrected and this final commit was tested in a fresh run.
 
 ### ROUTER ARCHITECTURE
 
@@ -2343,11 +2343,11 @@ The pre-existing line-ending-only working-tree changes in `app/lint-baseline.xml
 
 ### TEST STATUS
 
-Added routing coverage for English, Gujarati, Hindi, mixed/transliterated commands, local-vs-planner selection, media/search collisions, missing parameters, ambiguous call/message targets, malformed URLs and package names, unregistered tools, safe follow-up context, and AgentPipeline integration. Existing Phase 1/2 tests remain in place. No local test/build result is claimed: the local environment has no Java runtime; the new commit must be verified by GitHub Actions.
+Added routing coverage for English, Gujarati, Hindi, mixed/transliterated commands, local-vs-planner selection, media/search collisions, missing parameters, ambiguous call/message targets, malformed URLs and package names, unregistered tools, safe follow-up context, and AgentPipeline integration. Existing Phase 1/2 tests remain in place. GitHub Actions passed `test`, `testDebugUnitTest`, and `assembleDebug` with zero failing tests. Local Gradle could not start because this Windows workspace has no Java runtime; no local build result is claimed.
 
 ### BUILD STATUS
 
-**PENDING** for the Smart Tool Router commit. Required workflow verification is `test`, `testDebugUnitTest`, `assembleDebug`, `lintDebug`, unsigned `assembleRelease` with R8/ProGuard, and instrumentation on API 26, 33, and 36. The latest prior green baseline run was `37134502987` on `7ec6aaf8375929709e1a7f1afe310cdf8df513db`; it predates these router changes and does not verify them.
+**GREEN** on commit `3ecc39d1d29dd95270daad9866d36da753bedeb1`, GitHub Actions run `37138050189`. Verified: `test`, `testDebugUnitTest`, `assembleDebug` (debug APK artifact uploaded), `lintDebug`, unsigned `assembleRelease` with R8/ProGuard (release APK artifact uploaded), and instrumentation on API 26, 33, and 36. All six configured jobs completed successfully. The earlier router runs are not used as evidence for this result.
 
 ### KNOWN LIMITATIONS
 
