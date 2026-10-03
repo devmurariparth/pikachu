@@ -242,8 +242,8 @@ class SmartToolRouter(
         val hasWhatsApp = q.contains("whatsapp")
         val hasMessage = hasWhatsApp && (containsAny(q, RoutingPhraseCatalog.message) || containsAny(q, setOf("send", "moklo", "mokal", "mokle", "bhejo", "भेजो")))
         if (hasWhatsApp && hasMessage) {
-            val parsed = WhatsAppManager.parseWhatsAppVoiceCommand(normalized.normalized)
-                ?: WhatsAppManager.parseWhatsAppVoiceCommand(original)
+            val parsed = WhatsAppManager.parseWhatsAppVoiceCommand(original)
+                ?: WhatsAppManager.parseWhatsAppVoiceCommand(normalized.normalized)
             if (parsed != null && !parsed.first.isSensitivePronoun()) {
                 val message = parsed.second?.takeIf(String::isNotBlank)
                 if (message != null) return candidate(ActionName.SEND_WHATSAPP, ActionParameters.SendWhatsApp("${parsed.first}|$message"), language, RouteConfidence.MEDIUM, RouteReason.NATURAL_LANGUAGE_MATCH)
