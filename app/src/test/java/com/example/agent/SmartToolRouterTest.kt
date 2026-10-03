@@ -6,6 +6,9 @@ import com.example.action.ToolRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import com.example.voice.InputConfidence
+import com.example.voice.LanguageNormalizer
+import com.example.voice.MultilingualErrorCode
 import org.junit.Test
 
 class SmartToolRouterTest {
@@ -67,6 +70,7 @@ class SmartToolRouterTest {
     @Test fun malformed_url_and_unsupported_registry_tool_are_typed_decisions() {
         val invalidUrl = clarify("open ftp://example.com")
         assertEquals(RouteReason.INVALID_PARAMETER, invalidUrl.reason)
+        assertEquals(MultilingualErrorCode.ENTITY_PARSE_FAILED, invalidUrl.multilingualError)
         assertEquals(RouteReason.INVALID_PARAMETER, clarify("open com.invalid..package").reason)
         val unsupported = SmartToolRouter(ToolRegistry(emptyList())).route("open Spotify")
         assertTrue(unsupported is RouteDecision.Unsupported)
@@ -89,6 +93,52 @@ class SmartToolRouterTest {
         assertTrue(router.route("play it", safeFollowUpContext = "play music Believer") is RouteDecision.PlannerRequired)
         assertTrue(router.route("call her", safeFollowUpContext = "open Spotify") is RouteDecision.ClarificationRequired)
         assertTrue(router.route("nonsense") is RouteDecision.NoMatch)
+    }
+
+    @Test fun multilingual_results_feed_router_and_uncertain_or_unsupported_input_never_executes_directly() {
+        val gujarati = LanguageNormalizer.understand("Spotify ma Arijit nu song vagad")
+        val guDecision = router.routeNormalized(gujarati)
+        assertTrue(guDecision is RouteDecision.DirectTool)
+        assertEquals(ActionName.PLAY_MUSIC, (guDecision as RouteDecision.DirectTool).request.name)
+
+        val hindi = LanguageNormalizer.understand("YouTube par video search karo")
+        assertTrue(hindi.language.code == "hi")
+        assertTrue(router.routeNormalized(hindi) !is RouteDecision.NoMatch)
+        assertEquals(ActionName.PLAY_MUSIC, direct("gaana bajao Kesariya", ActionName.PLAY_MUSIC).request.name)
+        assertTrue(router.route("samjavo ke alarm kem nathi lagyo") is RouteDecision.PlannerRequired)
+
+        val unsupported = LanguageNormalizer.understand("مرحبا").also {
+            assertTrue(it.errors.contains(MultilingualErrorCode.UNSUPPORTED_LANGUAGE))
+        }
+        assertTrue(router.routeNormalized(unsupported) is RouteDecision.PlannerRequired)
+
+        val missingTarget = router.route("Mom ko WhatsApp message bhejo")
+        assertTrue(missingTarget is RouteDecision.ClarificationRequired)
+        assertEquals(MultilingualErrorCode.MISSING_ENTITY, (missingTarget as RouteDecision.ClarificationRequired).multilingualError)
+        val unsafePronoun = router.route("Call him")
+        assertTrue(unsafePronoun is RouteDecision.ClarificationRequired)
+        assertEquals(MultilingualErrorCode.CONTEXT_UNSAFE, (unsafePronoun as RouteDecision.ClarificationRequired).multilingualError)
+
+        val ambiguous = LanguageNormalizer.understand("ગુજરાતી हिंदी English")
+        assertEquals(InputConfidence.LOW, ambiguous.confidence)
+        assertTrue(router.routeNormalized(ambiguous) is RouteDecision.PlannerRequired)
+    }
+
+    @Test fun mixed_transliterated_whatsapp_request_preserves_explicit_recipient_and_quoted_body() {
+        val route = router.route("Mom ne WhatsApp par 'I'm coming home' mokal")
+        assertTrue("Expected complete explicit WhatsApp request, got $route", route is RouteDecision.DirectTool)
+        val parameters = (route as RouteDecision.DirectTool).request.parameters as ActionParameters.SendWhatsApp
+        assertEquals("Mom|I'm coming home", parameters.targetAndMessage)
+    }
+
+    @Test fun natural_english_requests_route_without_fixed_command_templates() {
+        assertEquals(ActionName.OPEN_APP, direct("Could you open Spotify?", ActionName.OPEN_APP).request.name)
+        assertEquals(ActionName.PLAY_MUSIC, direct("Can you play Arijit's songs?", ActionName.PLAY_MUSIC).request.name)
+        assertEquals(ActionName.PLAY_VIDEO, direct("Please find the Naruto video on YouTube.", ActionName.PLAY_VIDEO).request.name)
+        assertEquals(ActionName.CALL, direct("Call Mom.", ActionName.CALL).request.name)
+
+        val message = direct("Send Mom a WhatsApp message saying I'll be home soon.", ActionName.SEND_WHATSAPP)
+        assertEquals("Mom|I'll be home soon.", (message.request.parameters as ActionParameters.SendWhatsApp).targetAndMessage)
     }
 
 }

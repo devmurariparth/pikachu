@@ -2352,3 +2352,38 @@ Added routing coverage for English, Gujarati, Hindi, mixed/transliterated comman
 ### KNOWN LIMITATIONS
 
 The router uses deterministic phrases and existing action parsers; free-form reasoning still belongs to the planner. It does not resolve contacts itself, and therefore relies on the existing contact/action layer to report missing, multiple, or permission-blocked matches safely. Starting a third-party app or media UI is not proof that playback or an external operation completed. Android permissions and the existing policy gate remain authoritative.
+
+## PHASE 4 MULTILINGUAL BRAIN ADDENDUM
+
+### PHASE 4 STATUS
+
+Implementation is prepared for verification on the current `main` line. The latest pre-Phase-4 main CI was green on commit `526f1656a85a3d700556fcd91fbcb15ff5965ada` (run `37140905112`). That run does not verify Phase 4. Phase 4 remains **PENDING** until a fresh workflow for the Phase 4 implementation commit completes successfully.
+
+### MULTILINGUAL ARCHITECTURE
+
+`LanguageNormalizer.understand` returns a typed `MultilingualInput` with original/normalized/transliterated text, supported language, script, mixed-language flag, confidence/category, preserved entities, and typed errors. The existing `AgentPipeline` normalizes once and passes that result to the existing `SmartToolRouter`; local selection, planner fallback, registry validation, action planning, policy gating, action execution, and verification remain in the Phase 2/3 path. The central phrase catalog uses whole-word Unicode boundaries and longest phrases first. Quoted text, URLs, numbers/times, known app names, and title-cased name candidates are masked during normalization and restored unchanged.
+
+Supported deterministic language labels are Gujarati (`gu`), Hindi (`hi`), and English (`en`), with script detection for Gujarati, Devanagari, Latin, mixed, unsupported, and unknown input. Common Gujarati/Hindi scripts and Latin transliterations are normalized. Low-confidence, ambiguous, unsupported, malformed, or incomplete input cannot become a direct action; it falls back to the planner or a localized clarification. Safe Phase 2 context remains a planner hint and never supplies executable tool parameters. Calls, messaging, and contact resolution remain subject to existing confirmation/permission policy.
+
+### FILES CHANGED
+
+- `app/src/main/java/com/example/voice/LanguageNormalizer.kt`
+- `app/src/main/java/com/example/agent/SmartToolRouter.kt`
+- `app/src/test/java/com/example/voice/LanguageNormalizerTest.kt`
+- `app/src/test/java/com/example/agent/SmartToolRouterTest.kt`
+- `docs/MULTILINGUAL_BRAIN.md`
+- `MJ_NEW_PROJECT_AUDIT.md`
+
+### TEST AND BUILD STATUS
+
+Phase 4 regression tests cover supported-script and transliterated Gujarati/Hindi, mixed-script ambiguity, English preservation, command variants, app/contact/entity preservation, quoted message bodies, URLs, numeric/time values, invalid and unsupported input, routing, required-entity errors, unsafe pronoun clarification, and the existing Phase 1/2/3 suites. The local Windows workspace has no Java runtime (`java` is not available), so no local Gradle result is claimed. The Phase 4 implementation must be considered unverified until the new GitHub Actions run verifies unit tests, lint, debug APK, R8 release, and API 26/33/36 instrumentation.
+
+### BUILD STATUS
+
+**PENDING CI.** The green Phase 3 run is not evidence for Phase 4. Update this section with the exact Phase 4 code commit and new run after the workflow completes; do not mark Phase 4 green in advance.
+
+### REMAINING LIMITATIONS
+
+This is deterministic command normalization, not speech recognition or general translation. Latin-only detection relies on a compact phrase catalog. Entity detection is a conservative lexical preservation layer rather than a full entity resolver; it never authorizes a recipient or sensitive operation. Follow-up reasoning remains with the configured planner. No Gemini Live, new STT/TTS engine, hidden always-on microphone, or accessibility automation was added.
+
+Existing action parameter schemas are unchanged; for example, alarm actions carry an hour rather than an arbitrary natural-language date/time. Requests that cannot be represented safely need clarification instead of silently dropping their date.

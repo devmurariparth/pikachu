@@ -6,6 +6,8 @@ import com.example.action.ActionParameters
 import com.example.action.ActionRequest
 import com.example.action.ToolRegistry
 import com.example.voice.LanguageNormalizer
+import com.example.voice.InputConfidence
+import com.example.voice.MultilingualErrorCode
 import com.example.voice.NormalizedCommand
 import java.net.URI
 import java.util.UUID
@@ -28,6 +30,7 @@ sealed interface RouteDecision {
     val confidence: RouteConfidence
     val reason: RouteReason
     val ambiguous: Boolean
+    val multilingualError: MultilingualErrorCode? get() = null
 
     data class DirectTool(
         val request: ActionRequest<out ActionParameters>,
@@ -51,7 +54,8 @@ sealed interface RouteDecision {
         override val language: String,
         override val confidence: RouteConfidence = RouteConfidence.LOW,
         override val reason: RouteReason,
-        override val ambiguous: Boolean = true
+        override val ambiguous: Boolean = true,
+        override val multilingualError: MultilingualErrorCode? = null
     ) : RouteDecision
 
     data class Unsupported(
@@ -109,7 +113,15 @@ class SmartToolRouter(
     internal fun routeNormalized(normalized: NormalizedCommand, safeFollowUpContext: String? = null): RouteDecision {
         val command = normalized.original
         val q = normalized.normalized.lowercase()
-        if (q.isBlank()) return RouteDecision.NoMatch(normalized.language.code)
+        if (q.isBlank() || MultilingualErrorCode.INVALID_INPUT in normalized.errors) {
+            return RouteDecision.NoMatch(normalized.language.code)
+        }
+        if (MultilingualErrorCode.UNSUPPORTED_LANGUAGE in normalized.errors ||
+            MultilingualErrorCode.AMBIGUOUS_LANGUAGE in normalized.errors ||
+            MultilingualErrorCode.NORMALIZATION_FAILED in normalized.errors
+        ) {
+            return RouteDecision.PlannerRequired(normalized.language.code, RouteConfidence.LOW)
+        }
 
         if (!safeFollowUpContext.isNullOrBlank() && FOLLOW_UP_REFERENCE.containsMatchIn(q) &&
             !containsAny(q, RoutingPhraseCatalog.call + RoutingPhraseCatalog.message) && !q.contains("whatsapp")) {
@@ -137,14 +149,14 @@ class SmartToolRouter(
         }
 
         val direct = routeNaturalMediaAndSensitive(command, normalized, q)
-        if (direct != null) return if (direct is RouteDecision.DirectTool) validate(direct) else direct
+        if (direct != null) return if (direct is RouteDecision.DirectTool) guardConfidence(validate(direct), normalized) else direct
 
         when (val existing = LocalIntentRouter.routeNormalized(normalized)) {
-            is LocalRoute.Handled -> return validate(RouteDecision.DirectTool(
+            is LocalRoute.Handled -> return guardConfidence(validate(RouteDecision.DirectTool(
                 existing.request,
                 existing.language,
                 RouteConfidence.HIGH
-            ))
+            )), normalized)
             LocalRoute.FallbackToAi -> Unit
         }
 
@@ -164,6 +176,12 @@ class SmartToolRouter(
         }
         return RouteDecision.NoMatch(normalized.language.code)
     }
+
+    /** Low-confidence language detection may ask the planner, but cannot directly execute a tool. */
+    private fun guardConfidence(route: RouteDecision, input: NormalizedCommand): RouteDecision =
+        if (input.confidence == InputConfidence.LOW && route is RouteDecision.DirectTool) {
+            RouteDecision.PlannerRequired(input.language.code, RouteConfidence.LOW, RouteReason.REASONING_REQUIRED)
+        } else route
 
     private fun routeNaturalMediaAndSensitive(
         original: String,
@@ -242,12 +260,52 @@ class SmartToolRouter(
         val hasWhatsApp = q.contains("whatsapp")
         val hasMessage = hasWhatsApp && (containsAny(q, RoutingPhraseCatalog.message) || containsAny(q, setOf("send", "moklo", "mokal", "mokle", "bhejo", "भेजो")))
         if (hasWhatsApp && hasMessage) {
+            val contactFirstMessage = CONTACT_FIRST_WHATSAPP.find(original)
+            if (contactFirstMessage != null) {
+                val target = contactFirstMessage.groupValues[1].trim().removeSuffix(".")
+                val message = contactFirstMessage.groupValues[2].trim()
+                if (target.isNotBlank() && !target.isSensitivePronoun() && message.isNotBlank()) {
+                    return candidate(
+                        ActionName.SEND_WHATSAPP,
+                        ActionParameters.SendWhatsApp("$target|$message"),
+                        language,
+                        RouteConfidence.MEDIUM,
+                        RouteReason.NATURAL_LANGUAGE_MATCH
+                    )
+                }
+            }
             val parsed = WhatsAppManager.parseWhatsAppVoiceCommand(original)
                 ?: WhatsAppManager.parseWhatsAppVoiceCommand(normalized.normalized)
             if (parsed != null && !parsed.first.isSensitivePronoun()) {
                 val message = parsed.second?.takeIf(String::isNotBlank)
                 if (message != null) return candidate(ActionName.SEND_WHATSAPP, ActionParameters.SendWhatsApp("${parsed.first}|$message"), language, RouteConfidence.MEDIUM, RouteReason.NATURAL_LANGUAGE_MATCH)
                 return clarify("What message should I prepare for ${parsed.first}?", ActionName.SEND_WHATSAPP, language, RouteReason.MISSING_PARAMETER, mapOf("target" to parsed.first))
+            }
+            val quotedMessages = normalized.preservedEntities
+                .filter { it.type == com.example.voice.PreservedEntityType.QUOTED_TEXT }
+            if (quotedMessages.size == 1) {
+                val message = quotedMessages.single().text.trim().trim('"', '\'', '“', '”', '‘', '’')
+                val quotedTextPattern = Regex(Regex.escape(quotedMessages.single().text), RegexOption.IGNORE_CASE)
+                val withoutQuotedMessage = q.replace(quotedTextPattern, " ")
+                val target = preserveOriginalCase(
+                    cleanQuery(withoutQuotedMessage, setOf("whatsapp", "message", "msg", "send", "moklo", "mokal", "mokle", "bhejo", "on", "in", "par", "to", "ne", "ko", "please", "now")),
+                    original
+                )
+                if (message.isNotBlank() && target.isNotBlank() && !target.isSensitivePronoun()) {
+                    return candidate(
+                        ActionName.SEND_WHATSAPP,
+                        ActionParameters.SendWhatsApp("$target|$message"),
+                        language,
+                        RouteConfidence.MEDIUM,
+                        RouteReason.NATURAL_LANGUAGE_MATCH
+                    )
+                }
+                return clarify(
+                    "Who should receive the WhatsApp message?",
+                    ActionName.SEND_WHATSAPP,
+                    language,
+                    RouteReason.MISSING_PARAMETER
+                )
             }
             val target = preserveOriginalCase(cleanQuery(q, setOf("whatsapp", "message", "msg", "send", "moklo", "mokal", "mokle", "bhejo", "on", "par", "to", "ne", "ko", "please", "now")), original)
             if (target.isBlank() || target.isSensitivePronoun()) {
@@ -316,7 +374,19 @@ class SmartToolRouter(
         language: String,
         reason: RouteReason,
         partial: Map<String, String> = emptyMap()
-    ) = RouteDecision.ClarificationRequired(localizePrompt(prompt, language), action, partial, language, reason = reason)
+    ) = RouteDecision.ClarificationRequired(
+        prompt = localizePrompt(prompt, language),
+        action = action,
+        partialParameters = partial,
+        language = language,
+        reason = reason,
+        multilingualError = when (reason) {
+            RouteReason.MISSING_PARAMETER -> MultilingualErrorCode.MISSING_ENTITY
+            RouteReason.AMBIGUOUS_REFERENCE -> MultilingualErrorCode.CONTEXT_UNSAFE
+            RouteReason.INVALID_PARAMETER -> MultilingualErrorCode.ENTITY_PARSE_FAILED
+            else -> null
+        }
+    )
 
     private fun localizePrompt(prompt: String, language: String): String {
         val target = prompt.substringAfter("What message should I prepare for ", missingDelimiterValue = "").removeSuffix("?")
@@ -418,8 +488,11 @@ class SmartToolRouter(
         private val WEB_TLDS = setOf("com", "org", "net", "io", "dev", "app", "in", "co")
         private val SENSITIVE_PRONOUNS = setOf("him", "her", "them", "it", "that", "this", "someone", "anyone", "me", "myself", "you", "उसको", "उसे", "उन्हें", "તેને", "એને")
         private val AMBIGUOUS_REFERENCE = Regex("(?i)\\b(?:play|open|call|phone|message|msg|send|whatsapp)\\b.*\\b(?:it|that|this|that one|something|him|her|them|उसको|उसे|તેને|એને)\\b|\\b(?:it|that|this|something|him|her|them)\\s+(?:play|open|call|message|msg)\\b")
+        private val CONTACT_FIRST_WHATSAPP = Regex(
+            "(?i)\\b(?:please\\s+)?send\\s+(?:a\\s+)?(.+?)\\s+(?:a\\s+)?whatsapp\\s+(?:message|msg)\\s+saying\\s+(.+)$"
+        )
         private val FOLLOW_UP_REFERENCE = Regex("(?i)(?:^|\\s)(?:it|that|there|same|this)(?:$|\\s)|એ|તે|वह|यह")
-        private val FILLER_WORDS = setOf("i", "me", "my", "want", "to", "the", "a", "an", "please", "play", "on", "ma", "nu", "no", "ne", "par", "for", "song", "music", "vagado", "vagad", "vagadvo", "bajao", "laga", "do", "set", "alarm", "kal", "tomorrow", "subah", "morning", "baje", "at", "kar", "karo", "search", "find", "video", "videos", "youtube", "yt", "spotify", "open", "launch", "khol", "kholo", "खोलो", "ખોલો", "mujhe", "mare", "મારે", "છે", "હતું", "है")
+        private val FILLER_WORDS = setOf("i", "me", "my", "want", "to", "the", "a", "an", "please", "can", "could", "would", "you", "help", "play", "on", "in", "ma", "nu", "no", "ne", "par", "for", "song", "songs", "music", "vagado", "vagad", "vagadvo", "bajao", "laga", "do", "set", "alarm", "kal", "tomorrow", "subah", "morning", "baje", "at", "kar", "karo", "search", "find", "video", "videos", "youtube", "yt", "spotify", "open", "launch", "khol", "kholo", "खोलो", "ખોલો", "mujhe", "mare", "મારે", "છે", "હતું", "है")
         private val REASONING_CUES = setOf("compare", "explain", "summarize", "summarise", "plan", "why", "how", "કેમ", "સમજાવો", "तुलना", "समझाओ", "क्यों")
     }
 }
