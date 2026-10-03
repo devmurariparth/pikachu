@@ -5,10 +5,12 @@ plugins {
   alias(libs.plugins.secrets)
   alias(libs.plugins.kotlin.serialization)
   alias(libs.plugins.ksp)
+  // Google Services remains optional until a valid google-services.json is added to the project.
+  // Applying the plugin without a Firebase project config will fail the build.
 }
 
 android {
-  namespace = "com.example"
+  namespace = "com.aistudio.mjassistant.abxyzt"
   compileSdk = 36
 
   defaultConfig {
@@ -35,8 +37,6 @@ android {
         keyPassword = System.getenv("KEY_PASSWORD")
       }
     }
-    // If a project-level debug.keystore exists (e.g. in local/AI Studio environment), use it.
-    // Otherwise, fall back to AGP's default auto-generated ~/.android/debug.keystore so CI passes cleanly.
     if (rootDebugKeystore.exists()) {
       getByName("debug") {
         storeFile = rootDebugKeystore
@@ -87,8 +87,6 @@ android {
   }
 }
 
-// Configure the Secrets Gradle Plugin to use .env and .env.example files
-// to match the convention used in Web projects.
 secrets {
   propertiesFileName = ".env"
   defaultPropertiesFileName = ".env.example"
