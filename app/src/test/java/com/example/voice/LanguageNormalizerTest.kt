@@ -37,6 +37,17 @@ class LanguageNormalizerTest {
         assertEquals(SupportedLanguage.HINDI, LanguageNormalizer.normalize("kal subah alarm laga do").language)
     }
 
+    @Test fun transliterated_gujarati_mixed_request_normalizes_phrase_and_language() {
+        val result = LanguageNormalizer.normalize("Spotify ma Arijit nu song vagadvo")
+        assertEquals(SupportedLanguage.GUJARATI, result.language)
+        assertTrue(result.normalized.contains("play"))
+        assertTrue(result.normalized.contains("spotify"))
+    }
+
+    @Test fun transliterated_hindi_message_language_is_detected() {
+        assertEquals(SupportedLanguage.HINDI, LanguageNormalizer.normalize("Mom ko WhatsApp message bhejo").language)
+    }
+
     @Test fun cancellation_phrases_are_shared() {
         listOf(
             "Stop", "રોક", "રોકો", "બંધ", "બંધ કર", "Cancel",

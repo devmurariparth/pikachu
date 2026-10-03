@@ -6,6 +6,7 @@ import com.example.action.ActionRequest
 import com.example.WhatsAppManager
 import com.example.music.MusicActionManager
 import com.example.voice.LanguageNormalizer
+import com.example.voice.NormalizedCommand
 import java.util.UUID
 
 sealed interface LocalRoute {
@@ -59,7 +60,11 @@ object LocalIntentRouter {
         return query.takeIf { it.isNotBlank() }
     }
     fun route(text: String): LocalRoute {
-        val normalized = LanguageNormalizer.normalize(text)
+        return routeNormalized(LanguageNormalizer.normalize(text))
+    }
+
+    /** Allows the smart router to normalize once before deterministic legacy fast-path matching. */
+    internal fun routeNormalized(normalized: NormalizedCommand): LocalRoute {
         val q = normalized.normalized.lowercase()
         fun h(name: ActionName, p: ActionParameters) =
             LocalRoute.Handled(ActionRequest("LOCAL_" + UUID.randomUUID(), name, p), normalized.language.code)
@@ -137,20 +142,7 @@ object LocalIntentRouter {
         }
 
         // App-first and verb-first forms share the same route after language normalization.
-        val appPatterns = listOf(
-            "youtube music" to "com.google.android.apps.youtube.music",
-            "youtube" to "com.google.android.youtube",
-            "yt" to "com.google.android.youtube",
-            "chrome" to "com.android.chrome",
-            "spotify" to "com.spotify.music",
-            "gmail" to "com.google.android.gm",
-            "maps" to "com.google.android.apps.maps",
-            "google maps" to "com.google.android.apps.maps",
-            "whatsapp" to "com.whatsapp",
-            "messages" to "com.google.android.apps.messaging",
-            "camera" to "com.google.android.GoogleCamera",
-            "photos" to "com.google.android.apps.photos"
-        )
+        val appPatterns = RoutingPhraseCatalog.appPackages.entries
         val openVerb = Regex("""\b(open|launch)\b""")
         for ((app, packageName) in appPatterns) {
             val appWord = Regex("""\b${Regex.escape(app)}\b""")
@@ -159,8 +151,14 @@ object LocalIntentRouter {
             }
         }
 
-        Regex("""\b(?:set|start|create)\s+(?:a\s+)?timer\s+(?:for\s+)?(\d+)\s*(?:minutes?|min)\b.*""").matchEntire(q)?.let {
-            return h(ActionName.SET_TIMER, ActionParameters.SetTimer(it.groupValues[1].toInt()))
+        val timerRequested = Regex("""\btimer\b""").containsMatchIn(q) &&
+            Regex("""\b(set|start|create|kar|karo|laga)\b""").containsMatchIn(q)
+        if (timerRequested) {
+            val timerMinutes = Regex("""(?:\btimer\b.*?\b|^)(\d+)\s*(?:minutes?|min)?\b""").find(q)
+                ?: Regex("""\b(\d+)\s*(?:minutes?|min)\b.*\btimer\b""").find(q)
+            timerMinutes?.groupValues?.get(1)?.toIntOrNull()?.let { minutes ->
+                return h(ActionName.SET_TIMER, ActionParameters.SetTimer(minutes))
+            }
         }
 
         // Alarm time may occur before or after the word "alarm" in natural multilingual word order.
@@ -181,6 +179,9 @@ object LocalIntentRouter {
         }
 
         Regex("""\btimer\b.*?(\d+)\s*(?:minutes?|min)?\b.*""").matchEntire(q)?.let {
+            return h(ActionName.SET_TIMER, ActionParameters.SetTimer(it.groupValues[1].toInt()))
+        }
+        Regex("""(\d+)\s*(?:minutes?|min)\b.*\btimer\b.*""").matchEntire(q)?.let {
             return h(ActionName.SET_TIMER, ActionParameters.SetTimer(it.groupValues[1].toInt()))
         }
         return LocalRoute.FallbackToAi

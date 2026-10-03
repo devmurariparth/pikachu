@@ -51,6 +51,33 @@ class AgentPipelineTest {
         assertTrue(result.response.message.contains("can't verify"))
     }
 
+    @Test fun smart_mixed_language_action_is_local_and_ambiguous_request_is_clarified_without_ai() = runTest {
+        var plannerCalls = 0
+        val executed = mutableListOf<ActionName>()
+        val runtime = ActionRuntime()
+        val pipeline = AgentPipeline(runtime, ActionPlanPipeline(runtime, executeStep = { _, request, _ ->
+            executed += request.name
+            ActionResult.Started(request.id, request.name, "Android accepted")
+        }))
+        val music = pipeline.execute(
+            ApplicationProvider.getApplicationContext(),
+            "Spotify ma Arijit nu song vagadvo",
+            planner = { plannerCalls++; Result.failure(AssertionError("A clear local music request must not call the planner.")) }
+        ).getOrThrow()
+        assertTrue(music.fromLocalFastPath)
+        assertEquals(listOf(ActionName.PLAY_MUSIC), executed)
+        assertEquals(0, plannerCalls)
+
+        val unclear = pipeline.execute(
+            ApplicationProvider.getApplicationContext(),
+            "call her",
+            planner = { plannerCalls++; Result.failure(AssertionError("Sensitive ambiguity must be clarified locally.")) }
+        ).getOrThrow()
+        assertEquals(AgentExecutionStatus.RESPONDED, unclear.response.status)
+        assertTrue(unclear.response.message.contains("Who should I call?"))
+        assertEquals(0, plannerCalls)
+    }
+
     @Test fun planner_receives_normalized_command_and_detected_gujarati_language() = runTest {
         var planningRequest: AgentPlanningRequest? = null
         val result = AgentPipeline().execute(

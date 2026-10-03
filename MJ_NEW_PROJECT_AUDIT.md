@@ -2312,3 +2312,43 @@ Tests have been added for strict and malformed plans, unknown tools, typed param
 ### VERIFICATION GATE
 
 Phase 2 verification is complete for commit `96e436a4ff476e98e15fc10a25875302ecc9e359` and run `37133079482`. No Phase 3 implementation was added as part of this Phase 2 work. Any future code changes must be verified by their own GitHub Actions run without disabling or weakening tests.
+
+## PHASE 3 SMART TOOL ROUTER ADDENDUM
+
+This addendum tracks the separate Smart Tool Router phase. It does not replace the earlier Phase 3 Android system-assistant foundation entry above.
+
+### PHASE 3 STATUS
+
+**IMPLEMENTED LOCALLY; CI VERIFICATION PENDING.** The typed `SmartToolRouter` is integrated before the existing planner/execution pipeline. Do not call this phase complete until a new GitHub Actions run for the Smart Tool Router commit is green.
+
+### ROUTER ARCHITECTURE
+
+`SmartToolRouter` normalizes each request once, applies centralized multilingual phrase/app mappings and deterministic media/sensitive-action parsing, validates typed candidates against the existing `ToolRegistry`, then returns one of `DirectTool`, `PlannerRequired`, `ClarificationRequired`, `Unsupported`, or `NoMatch`. Direct actions continue through `AgentPipeline`, `ActionPlanPipeline`, `ActionRuntime`, and the existing policy gate. The router does not execute actions or convert raw model text into tool calls. Incomplete/sensitive requests are clarified locally; reasoning and unmatched conversation requests use the existing planner path. Safe Phase 2 context is passed only as planner context, never as an executable parameter.
+
+Local-first coverage includes app opening, music/video and web search collision handling, alarms, timers, calls, and WhatsApp preparation. Gujarati, Hindi, mixed English/script, and supported transliterated forms are normalized. Pronoun targets and conflicting/incomplete requests do not produce executable actions. Contacts, permissions, policy, action execution, and verification remain in their existing layers.
+
+### FILES CHANGED
+
+- `app/src/main/java/com/example/agent/SmartToolRouter.kt` (new)
+- `app/src/main/java/com/example/agent/AgentPipeline.kt`
+- `app/src/main/java/com/example/agent/LocalIntentRouter.kt`
+- `app/src/main/java/com/example/voice/LanguageNormalizer.kt`
+- `app/src/test/java/com/example/agent/SmartToolRouterTest.kt` (new)
+- `app/src/test/java/com/example/agent/AgentPipelineTest.kt`
+- `app/src/test/java/com/example/voice/LanguageNormalizerTest.kt`
+- `docs/SMART_TOOL_ROUTER.md` (new)
+- `MJ_NEW_PROJECT_AUDIT.md`
+
+The pre-existing line-ending-only working-tree changes in `app/lint-baseline.xml` and `gradlew.bat` are excluded from this Phase 3 change.
+
+### TEST STATUS
+
+Added routing coverage for English, Gujarati, Hindi, mixed/transliterated commands, local-vs-planner selection, media/search collisions, missing parameters, ambiguous call/message targets, malformed URLs and package names, unregistered tools, safe follow-up context, and AgentPipeline integration. Existing Phase 1/2 tests remain in place. No local test/build result is claimed: the local environment has no Java runtime; the new commit must be verified by GitHub Actions.
+
+### BUILD STATUS
+
+**PENDING** for the Smart Tool Router commit. Required workflow verification is `test`, `testDebugUnitTest`, `assembleDebug`, `lintDebug`, unsigned `assembleRelease` with R8/ProGuard, and instrumentation on API 26, 33, and 36. The latest prior green baseline run was `37134502987` on `7ec6aaf8375929709e1a7f1afe310cdf8df513db`; it predates these router changes and does not verify them.
+
+### KNOWN LIMITATIONS
+
+The router uses deterministic phrases and existing action parsers; free-form reasoning still belongs to the planner. It does not resolve contacts itself, and therefore relies on the existing contact/action layer to report missing, multiple, or permission-blocked matches safely. Starting a third-party app or media UI is not proof that playback or an external operation completed. Android permissions and the existing policy gate remain authoritative.

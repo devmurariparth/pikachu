@@ -13,7 +13,8 @@ import com.example.voice.LanguageNormalizer
 /** One local-first orchestration path for parsing, planning, gated tools, verification, and response. */
 class AgentPipeline(
     private val runtime: ActionRuntime = ActionRuntime(),
-    private val planPipeline: ActionPlanPipeline = ActionPlanPipeline(runtime)
+    private val planPipeline: ActionPlanPipeline = ActionPlanPipeline(runtime),
+    private val smartToolRouter: SmartToolRouter = SmartToolRouter()
 ) {
     @Volatile private var lastSafeGoal: String? = null
 
@@ -26,17 +27,28 @@ class AgentPipeline(
     ): Result<AgentOutcome> {
         val normalized = LanguageNormalizer.normalize(command)
         val language = normalized.language.code
-        val localPlan = when (val route = LocalIntentRouter.route(command)) {
-            is LocalRoute.Handled -> AgentPlan.singleAction(
+        val priorContext = lastSafeGoal.takeIf { !it.isNullOrBlank() && hasFollowUpReference(normalized.normalized) }
+        val route = smartToolRouter.routeNormalized(normalized, priorContext)
+        val localPlan = when (route) {
+            is RouteDecision.DirectTool -> AgentPlan.singleAction(
                 route.request,
                 command,
                 route.language,
                 speechResponse = "I started the requested action."
             )
-            LocalRoute.FallbackToAi -> null
+            is RouteDecision.ClarificationRequired -> responsePlan(
+                route.prompt,
+                route.language,
+                FinalResponseMode.ASK_CLARIFICATION
+            )
+            is RouteDecision.Unsupported -> responsePlan(
+                "That capability is not available on this device.",
+                route.language,
+                FinalResponseMode.DIRECT_RESPONSE
+            )
+            is RouteDecision.PlannerRequired, is RouteDecision.NoMatch -> null
         }
         val plan = localPlan ?: run {
-            val priorContext = lastSafeGoal.takeIf { !it.isNullOrBlank() && hasFollowUpReference(normalized.normalized) }
             planner(AgentPlanningRequest(normalized.normalized, language, priorContext)).getOrElse { return Result.failure(it) }
         }
 
@@ -55,7 +67,7 @@ class AgentPipeline(
                 completedSteps = emptyList(),
                 failedSteps = emptyList()
             )
-            return Result.success(AgentOutcome(plan, null, response, fromLocalFastPath = false))
+            return Result.success(AgentOutcome(plan, null, response, fromLocalFastPath = localPlan != null))
         }
 
         planPipeline.validate(plan)?.let { error ->
@@ -71,6 +83,18 @@ class AgentPipeline(
 
     fun cancel(actionId: String): Boolean = runtime.cancel(actionId)
     fun cancelAll() = runtime.cancelAll()
+
+    private fun responsePlan(message: String, language: String, mode: FinalResponseMode) = AgentPlan(
+        id = "route-response",
+        goal = "Resolve the user's request safely",
+        requiredTools = emptySet(),
+        steps = emptyList(),
+        riskLevel = AgentRiskLevel.LOW,
+        expectedResult = "A routing response is ready.",
+        finalResponseMode = mode,
+        speechResponse = message,
+        language = language
+    )
 
     private fun toOutcome(plan: AgentPlan, execution: com.example.action.ActionPlanResult, local: Boolean): AgentOutcome {
         val completed = execution.steps.filter { it.status == PlanStepStatus.VERIFIED }.map { it.step.id }
