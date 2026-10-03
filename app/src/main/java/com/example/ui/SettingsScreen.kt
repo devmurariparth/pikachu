@@ -1297,7 +1297,7 @@ fun SettingsScreen(
                         )
                     }
                     Text(
-                        text = "Version 1.0 • Powered by Google Gemini 2.5 Flash • Secure local storage for all keys and preferences.",
+                        text = "Version 1.0 • Powered by Google Gemini 3.8 Flash • Secure local storage for all keys and preferences.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
