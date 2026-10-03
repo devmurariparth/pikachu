@@ -17,7 +17,10 @@ class ActionRuntimeTest {
         override val name = ActionName.SEARCH_WEB
         override val policy = ActionPolicy()
         override val parameterType = ActionParameters.SearchWeb::class
-        override suspend fun execute(context: Context, request: ActionRequest<ActionParameters.SearchWeb>) =
+        override suspend fun execute(
+            context: Context,
+            request: ActionRequest<ActionParameters.SearchWeb>
+        ): ActionResult =
             ActionResult.Started(request.id, request.name, "Dispatched")
     }
 
