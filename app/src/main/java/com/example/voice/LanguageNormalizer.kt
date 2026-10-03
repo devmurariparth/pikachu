@@ -52,7 +52,7 @@ object LanguageNormalizer {
     private val wordSplit = Regex("[^\\p{L}\\p{N}]+")
 
     private val gujaratiWords = setOf(
-        "kholo", "khol", "kholje", "vagad", "vagado", "vagadvo", "moklo", "mokal", "mokale", "mokalo",
+        "kholo", "khol", "kholje", "vagad", "vagado", "vagadvo", "moklo", "mokal", "mokale", "mokalo", "kar", "karo",
         "shodh", "shodho", "karvu", "che", "mare", "maare", "ne", "nu", "ane", "hamna", "gana", "gaana", "samjavo",
         "kaale", "savare", "vage", "vagye", "bandh", "rok", "muk", "muki", "par", "ma"
     )
@@ -109,7 +109,7 @@ object LanguageNormalizer {
     private val appNames = listOf(
         "youtube music", "google maps", "whatsapp", "youtube", "spotify", "chrome", "gmail", "messages", "camera", "photos"
     )
-    private val quoted = Regex("\"[^\"\\r\\n]{1,1000}\"|'[^'\\r\\n]{1,1000}'|“[^”\\r\\n]{1,1000}”|‘[^’\\r\\n]{1,1000}’")
+    private val quoted = Regex("\"[^\"\\r\\n]{1,1000}\"|'(?:[^'\\r\\n]|'(?=[\\p{L}])){1,1000}'|“[^”\\r\\n]{1,1000}”|‘[^’\\r\\n]{1,1000}’")
     private val url = Regex("(?i)\\b(?:https?://|ftp://)[^\\s<>\\\"']+")
     private val numberOrTime = Regex("(?<![\\p{L}\\p{N}])\\d{1,4}(?::\\d{2})?(?:\\s?(?:am|pm))?(?![\\p{L}\\p{N}])", RegexOption.IGNORE_CASE)
     private val properNoun = Regex("(?<![\\p{L}\\p{N}])[A-Z][\\p{L}\\p{M}0-9]*(?:['’.-][A-Z]?[\\p{L}\\p{M}0-9]+)*(?![\\p{L}\\p{N}])")
