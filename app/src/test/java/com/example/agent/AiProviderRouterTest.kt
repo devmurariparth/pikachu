@@ -93,4 +93,41 @@ class AiProviderRouterTest {
         assertTrue(router.plan("do something", "en").isFailure)
         assertEquals(0, fallbackCalls)
     }
+
+    @Test fun structured_agent_planning_uses_fallback_for_transient_provider_failure() = runTest {
+        var primaryCalls = 0
+        var fallbackCalls = 0
+        val primary = object : AiProvider, AgentPlanProvider {
+            override val id = AiProviderId.GEMINI
+            override suspend fun plan(command: String, language: String, config: AiProviderConfig): Result<PlannedAction> =
+                Result.failure(AiProviderException(AiProviderErrorCategory.NETWORK_ERROR, "offline", true))
+            override suspend fun planAgent(request: AgentPlanningRequest, config: AiProviderConfig): Result<AgentPlan> {
+                primaryCalls++
+                return Result.failure(AiProviderException(AiProviderErrorCategory.NETWORK_ERROR, "offline", true))
+            }
+        }
+        val fallback = object : AiProvider, AgentPlanProvider {
+            override val id = AiProviderId.OPENAI
+            override suspend fun plan(command: String, language: String, config: AiProviderConfig): Result<PlannedAction> =
+                Result.failure(IllegalStateException("Legacy route should not be used."))
+            override suspend fun planAgent(request: AgentPlanningRequest, config: AiProviderConfig): Result<AgentPlan> {
+                fallbackCalls++
+                assertEquals("gu", request.language)
+                return Result.success(AgentPlan(
+                    id = "answer", goal = "Answer", requiredTools = emptySet(), steps = emptyList(),
+                    riskLevel = AgentRiskLevel.LOW, expectedResult = "Answer is ready",
+                    finalResponseMode = FinalResponseMode.DIRECT_RESPONSE,
+                    speechResponse = "જવાબ", language = "gu"
+                ))
+            }
+        }
+
+        val result = AiProviderRouter(mapOf(AiProviderId.GEMINI to primary, AiProviderId.OPENAI to fallback))
+            .planAgent(AgentPlanningRequest("સમજાવો", "gu"))
+
+        assertTrue(result.isSuccess)
+        assertEquals(1, primaryCalls)
+        assertEquals(1, fallbackCalls)
+        assertEquals("જવાબ", result.getOrThrow().speechResponse)
+    }
 }

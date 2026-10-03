@@ -1,5 +1,6 @@
 package com.example.agent
 
+import com.example.action.ActionName
 import com.example.network.GenerateContentRequest
 import com.example.network.GenerateContentResponse
 import com.example.network.GeminiApiService
@@ -47,6 +48,10 @@ class GeminiAiProviderTest {
 
     private fun validResponse() = InteractionResponse(
         outputText = """{"action":"CHAT","payload":null,"speech":"Hello","lang":"en"}"""
+    )
+
+    private fun validPlanResponse() = InteractionResponse(
+        outputText = """{"goal":"Search for weather","required_tools":["SEARCH_WEB"],"risk_level":"LOW","expected_result":"The search request is accepted","final_response_mode":"SPEAK_RESULT","speech":"I started the search.","lang":"en","steps":[{"id":"search","action":"SEARCH_WEB","payload":"weather","depends_on":[],"risk_level":"LOW","expected_result":"The search opens"}]}"""
     )
 
     private fun provider(service: FakeService, key: String = "test-key") = GeminiAiProvider(
@@ -129,5 +134,33 @@ class GeminiAiProviderTest {
         job.cancelAndJoin()
         assertTrue(job.isCancelled)
         assertEquals(1, service.calls)
+    }
+
+    @Test fun agent_planner_uses_central_model_and_stateless_json_request_with_context() = runTest {
+        val service = FakeService { validPlanResponse() }
+        val result = provider(service).planAgent(
+            AgentPlanningRequest("search for it", "en", recentGoal = "search the web for cats")
+        )
+
+        assertTrue(result.isSuccess)
+        val request = service.lastRequest!!
+        assertEquals(AiModelConfig.PRIMARY_PLANNER, request.model)
+        assertEquals(false, request.store)
+        assertEquals("application/json", request.responseFormat.single().mimeType)
+        assertTrue(request.systemInstruction.contains("agent-plan schema"))
+        assertTrue(request.input.contains("search the web for cats"))
+        assertEquals(ActionName.SEARCH_WEB, result.getOrThrow().steps.single().request.name)
+    }
+
+    @Test fun malformed_agent_plan_fails_without_retrying_invalid_output() = runTest {
+        val service = FakeService { InteractionResponse(outputText = "{bad json") }
+        val result = provider(service).planAgent(
+            AgentPlanningRequest("make a plan", "en"),
+            AiProviderConfig(maxRetries = 2)
+        )
+
+        assertTrue(result.isFailure)
+        assertEquals(1, service.calls)
+        assertEquals(AiProviderErrorCategory.ACTION_ERROR, (result.exceptionOrNull() as AiProviderException).category)
     }
 }

@@ -76,12 +76,52 @@ interface AiProvider {
     suspend fun plan(command: String, language: String, config: AiProviderConfig = AiProviderConfig()): Result<PlannedAction>
 }
 
+/** Structured multi-step planner contract; providers can be added without changing execution. */
+interface AgentPlanProvider {
+    suspend fun planAgent(request: AgentPlanningRequest, config: AiProviderConfig = AiProviderConfig()): Result<AgentPlan>
+}
+
 class AiProviderRouter(
     private val providers: Map<AiProviderId, AiProvider>,
     private val primary: AiProviderId = AiProviderId.GEMINI,
     private val fallback: AiProviderId? = AiProviderId.OPENAI,
     private val config: AiProviderConfig = AiProviderConfig()
 ) {
+    suspend fun planAgent(request: AgentPlanningRequest): Result<AgentPlan> {
+        var last: Result<AgentPlan> = Result.failure(
+            AiProviderException(AiProviderErrorCategory.NO_API_KEY, "No agent planner is configured.", false)
+        )
+        var primaryError: AiProviderException? = null
+        for (id in listOf(primary, fallback).filterNotNull().distinct()) {
+            val provider = providers[id] as? AgentPlanProvider ?: continue
+            try {
+                val result = provider.planAgent(request, config)
+                if (result.isSuccess) return result
+                val error = result.exceptionOrNull()?.let(AiProviderErrors::fromThrowable)
+                    ?: AiProviderException(AiProviderErrorCategory.INVALID_API_RESPONSE, "MJ couldn't read the agent plan.", false)
+                last = Result.failure(error)
+                if (id == primary) {
+                    primaryError = error
+                    if (!AiProviderErrors.mayUseFallback(error)) return last
+                } else if (error.category == AiProviderErrorCategory.NO_API_KEY && primaryError != null) {
+                    return Result.failure(primaryError)
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                val mapped = AiProviderErrors.fromThrowable(error)
+                last = Result.failure(mapped)
+                if (id == primary) {
+                    primaryError = mapped
+                    if (!AiProviderErrors.mayUseFallback(mapped)) return last
+                } else if (mapped.category == AiProviderErrorCategory.NO_API_KEY && primaryError != null) {
+                    return Result.failure(primaryError)
+                }
+            }
+        }
+        return last
+    }
+
     suspend fun plan(command: String, language: String): Result<PlannedAction> {
         var last: Result<PlannedAction> = Result.failure(
             AiProviderException(AiProviderErrorCategory.NO_API_KEY, "No AI provider is configured.", false)

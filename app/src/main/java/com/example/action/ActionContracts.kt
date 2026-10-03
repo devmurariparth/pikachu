@@ -3,6 +3,7 @@ package com.example.action
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.reflect.KClass
 
 enum class ActionName {
     OPEN_APP, SEARCH_WEB, OPEN_URL, PLAY_MUSIC, PLAY_VIDEO, CALL, SEND_SMS, OPEN_SETTINGS,
@@ -51,7 +52,7 @@ enum class VerificationStatus { NOT_STARTED, STARTED, VERIFIED, FAILED }
 
 enum class ActionErrorCode {
     POLICY_BLOCKED, UNSUPPORTED, PERMISSION_REQUIRED, PRECONDITION_FAILED,
-    EXECUTION_FAILED, VERIFICATION_FAILED, CANCELLED, INVALID_PARAMETERS
+    EXECUTION_FAILED, TRANSIENT_FAILURE, TIMEOUT, VERIFICATION_FAILED, CANCELLED, INVALID_PARAMETERS
 }
 
 data class ActionError(
@@ -139,6 +140,8 @@ data class ActionContext(
 interface AssistantTool<P : ActionParameters> {
     val name: ActionName
     val policy: ActionPolicy
+    val parameterType: KClass<P>
+    val retrySafe: Boolean get() = false
     fun precondition(context: android.content.Context, request: ActionRequest<P>): ActionError? = null
     suspend fun execute(context: android.content.Context, request: ActionRequest<P>): ActionResult
     suspend fun verify(context: android.content.Context, request: ActionRequest<P>, started: ActionResult): ActionResult = started

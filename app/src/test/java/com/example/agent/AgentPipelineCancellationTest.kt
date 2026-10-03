@@ -22,7 +22,7 @@ class AgentPipelineCancellationTest {
             AgentPipeline().execute(
                 context = context,
                 command = "Explain an unfamiliar topic",
-                planner = { _, _ ->
+                planner = { _ ->
                     plannerStarted.complete(Unit)
                     awaitCancellation()
                 }

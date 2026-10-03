@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 10922)
+Total output lines: 964
+
 package com.example.viewmodel
 
 import android.content.Context
@@ -5,9 +8,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.AssistantService
 import com.example.AssistantLogger
+import com.example.action.ActionName
 import com.example.action.ActionContext
 import com.example.action.ActionRequest
-import com.example.action.ActionResult
 import com.example.action.ActionRuntime
 import com.example.agent.AgentPipeline
 import com.example.agent.AiProviderException
@@ -484,87 +487,7 @@ class ChatViewModel : ViewModel() {
         _pendingSensitiveMemory.value = null
 
         if (consentGiven) {
-            val result = UserMemoryManager.rememberPreference(
-                rawText = pending.candidateText,
-                allowSensitiveIfConsented = true
-            )
-            val msgText = when (result) {
-                is SaveMemoryResult.Success -> "With your explicit consent, I have securely remembered: \"${result.item.text}\"."
-                is SaveMemoryResult.AlreadyExists -> "I already have that preference saved in your memory."
-                is SaveMemoryResult.Disabled -> "Memory is currently disabled in Settings."
-                else -> "Your sensitive preference has been remembered with your explicit consent."
-            }
-            _messages.value = _messages.value + ChatMessage(
-                sender = MessageSender.AI,
-                text = msgText,
-                isMemoryAction = true
-            )
-            voiceManager?.speak(msgText)
-        } else {
-            val msgText = "Discarded. The sensitive data was not saved to memory."
-            _messages.value = _messages.value + ChatMessage(
-                sender = MessageSender.AI,
-                text = msgText,
-                isMemoryAction = true
-            )
-            voiceManager?.speak(msgText)
-        }
-    }
-
-    private fun isWhatDoYouRememberQuery(text: String): Boolean {
-        val lower = text.lowercase().trim()
-        return lower == "what do you remember" ||
-               lower == "what do you remember?" ||
-               lower.startsWith("what do you remember about") ||
-               lower == "what do you know about me" ||
-               lower == "what do you know about me?" ||
-               lower == "show memories" ||
-               lower == "show my memories" ||
-               lower == "list memories" ||
-               lower == "list my memories" ||
-               lower == "what memories do you have" ||
-               lower == "what are my memories" ||
-               lower == "tell me what you remember"
-    }
-
-    private fun isForgetQuery(text: String): Boolean {
-        val lower = text.lowercase().trim()
-        return lower.startsWith("forget ") ||
-               lower == "forget" ||
-               lower.startsWith("delete memory ") ||
-               lower.startsWith("remove memory ") ||
-               lower.startsWith("clear memories") ||
-               lower.startsWith("clear all memories") ||
-               lower == "forget everything" ||
-               lower == "forget all"
-    }
-
-    private fun isRememberQuery(text: String): Boolean {
-        val lower = text.lowercase().trim()
-        return lower.startsWith("remember that ") ||
-               lower.startsWith("remember to ") ||
-               lower.startsWith("remember my ") ||
-               lower.startsWith("remember me as ") ||
-               (lower.startsWith("remember ") && !lower.startsWith("remember?")) ||
-               lower.startsWith("please remember ") ||
-               lower.startsWith("note that ") ||
-               lower.startsWith("keep in mind that ") ||
-               lower.startsWith("don't forget that ") ||
-               lower.startsWith("dont forget that ") ||
-               lower.startsWith("save preference ")
-    }
-
-    private fun localizedLocalSuccess(language: String): String = when (language) {
-        "gu" -> "બરાબર, મેં એ શરૂ કર્યું."
-        "hi" -> "ठीक है, मैंने इसे शुरू कर दिया।"
-        else -> "Okay, I started it."
-    }
-
-    fun sendMessage(context: Context, userText: String, isSpokenInput: Boolean = false) {
-        val trimmed = userText.trim()
-        if (trimmed.isEmpty()) return
-        if (LanguageNormalizer.isCancellation(trimmed)) {
-            cancelCurrentAction()
+            val result = UserM…922 tokens truncated…     cancelCurrentAction()
             val language = LanguageNormalizer.normalize(trimmed).language.code
             val response = when (language) {
                 "gu" -> "બરાબર, મેં ચાલુ કામ રોકી દીધું."
@@ -801,8 +724,8 @@ class ChatViewModel : ViewModel() {
                 val commandResult = agentPipeline.execute(
                     context = context.applicationContext,
                     command = trimmed,
-                    planner = { normalizedCommand, language ->
-                        if (online) aiProviderRouter.plan(normalizedCommand, language)
+                    planner = { planningRequest ->
+                        if (online) aiProviderRouter.planAgent(planningRequest)
                         else Result.failure(IllegalStateException("Offline"))
                     },
                     actionContext = ActionContext(
@@ -817,26 +740,18 @@ class ChatViewModel : ViewModel() {
                 )
                 if (commandResult.isSuccess) {
                     val outcome = commandResult.getOrThrow()
-                    val responseText = when (val actionResult = outcome.result) {
-                        is ActionResult.Success -> outcome.plannedAction?.speechResponse
-                            ?: localizedLocalSuccess(outcome.language)
-                        is ActionResult.Started -> "I started the action, but I cannot verify completion yet."
-                        is ActionResult.PermissionRequired -> "Permission is required for that action."
-                        is ActionResult.Unsupported -> "That action is not supported on this Android version."
-                        is ActionResult.Blocked -> "I couldn't run that action."
-                        is ActionResult.TimedOut -> "That action timed out."
-                        is ActionResult.Failure -> "The action failed: ${actionResult.error.message}"
-                        is ActionResult.Cancelled -> "Action cancelled."
+                    val responseText = outcome.response.message
+                    val hasMemoryAction = outcome.plan.requiredTools.any {
+                        it in setOf(ActionName.SHOW_MEMORIES, ActionName.FORGET_MEMORY, ActionName.REMEMBER_PREFERENCE)
                     }
-                    val plannedName = outcome.plannedAction?.action
                     _messages.value = _messages.value + ChatMessage(
                         sender = MessageSender.AI,
                         text = responseText,
-                        language = outcome.language,
-                        isMemoryAction = plannedName in setOf("SHOW_MEMORIES", "FORGET_MEMORY", "REMEMBER_PREFERENCE"),
+                        language = outcome.response.language,
+                        isMemoryAction = hasMemoryAction,
                         isOfflineAction = outcome.fromLocalFastPath
                     )
-                    voiceManager?.speak(responseText, outcome.language)
+                    voiceManager?.speak(responseText, outcome.response.language)
                 } else {
                     AssistantLogger.w("ChatViewModel", "Assistant planner unavailable; attempting offline fallback")
                     val offlineFallback = OfflineActionHandler.handleOfflineCommand(context, trimmed)

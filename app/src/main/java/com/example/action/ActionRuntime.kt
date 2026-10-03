@@ -1,7 +1,6 @@
 package com.example.action
 
 import android.content.Context
-import com.example.IntentManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -12,17 +11,31 @@ class ActionRuntime(
     private val gateFactory: (Context, ActionContext) -> PermissionPolicyGate = { context, actionContext ->
         PermissionPolicyGate(context, actionContext)
     },
-    private val cancellationRegistry: ActionCancellationRegistry = ActionCancellationRegistry()
+    private val cancellationRegistry: ActionCancellationRegistry = ActionCancellationRegistry(),
+    val toolRegistry: ToolRegistry = ToolRegistry.existingCapabilities()
 ) {
     suspend fun execute(
         context: Context,
         request: ActionRequest<out ActionParameters>,
         actionContext: ActionContext = ActionContext()
     ): ActionResult {
-        val gate = gateFactory(context, actionContext)
-        val policy = PermissionPolicyGate.policyFor(request.name)
+        val tool = toolRegistry.find(request.name)
+            ?: return ActionResult.Unsupported(
+                request.id,
+                request.name,
+                ActionError(ActionErrorCode.UNSUPPORTED, "This action has no registered tool.")
+            )
+        if (!toolRegistry.accepts(request.name, request.parameters)) {
+            return ActionResult.Failure(
+                request.id,
+                request.name,
+                ActionError(ActionErrorCode.INVALID_PARAMETERS, "Action parameters do not match the registered tool.")
+            )
+        }
 
-        when (val decision = gate.evaluate(policy)) {
+        val gate = gateFactory(context, actionContext)
+
+        when (val decision = gate.evaluate(tool.policy)) {
             is PolicyDecision.Blocked -> return when (decision.error.code) {
                 ActionErrorCode.PERMISSION_REQUIRED -> ActionResult.PermissionRequired(request.id, request.name, decision.error)
                 ActionErrorCode.UNSUPPORTED -> ActionResult.Unsupported(request.id, request.name, decision.error)
@@ -31,34 +44,42 @@ class ActionRuntime(
             PolicyDecision.Allowed -> Unit
         }
 
+        invokeTool(tool, context, request)?.let { preconditionError ->
+            return ActionResult.Failure(request.id, request.name, preconditionError)
+        }
+
         val job = currentCoroutineContext().job
         cancellationRegistry.register(request.id, job)
         return try {
             currentCoroutineContext().ensureActive()
-            val legacyResult = withTimeout(ACTION_TIMEOUT_MS) { IntentManager.executeAction(
-                context = context,
-                action = request.name.name,
-                payload = request.parameters.toLegacyPayload()
-            ) }
-            currentCoroutineContext().ensureActive()
-
-            if (legacyResult.isSuccess) {
-                ActionResult.Started(request.id, request.name, "Action started.")
-            } else {
-                ActionResult.Failure(
-                    request.id,
-                    request.name,
-                    ActionError(
-                        ActionErrorCode.EXECUTION_FAILED,
-                        legacyResult.exceptionOrNull()?.message ?: "Action failed."
+            val actionResult = withTimeout(ACTION_TIMEOUT_MS) {
+                val started = executeTool(tool, context, request)
+                if (started.actionId != request.id || started.action != request.name) {
+                    ActionResult.Failure(
+                        request.id,
+                        request.name,
+                        ActionError(ActionErrorCode.VERIFICATION_FAILED, "Tool execution returned a mismatched action result.")
                     )
-                )
+                } else if (started is ActionResult.Started || started is ActionResult.Success) {
+                    val verified = verifyTool(tool, context, request, started)
+                    if (verified.actionId != request.id || verified.action != request.name) {
+                        ActionResult.Failure(
+                            request.id,
+                            request.name,
+                            ActionError(ActionErrorCode.VERIFICATION_FAILED, "Tool verification returned a mismatched action result.")
+                        )
+                    } else {
+                        verified
+                    }
+                } else started
             }
+            currentCoroutineContext().ensureActive()
+            actionResult
         } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
             ActionResult.TimedOut(
                 request.id,
                 request.name,
-                ActionError(ActionErrorCode.EXECUTION_FAILED, "Action timed out.")
+                ActionError(ActionErrorCode.TIMEOUT, "Action timed out.")
             )
         } catch (_: CancellationException) {
             ActionResult.Cancelled(request.id, request.name)
@@ -76,34 +97,42 @@ class ActionRuntime(
     fun cancel(actionId: String): Boolean = cancellationRegistry.cancel(actionId)
     fun cancelAll() = cancellationRegistry.cancelAll()
 
-    companion object { private const val ACTION_TIMEOUT_MS = 20_000L }
-
-    private fun ActionParameters.toLegacyPayload(): String? = when (this) {
-        is ActionParameters.OpenApp -> packageName
-        is ActionParameters.SearchWeb -> query
-        is ActionParameters.OpenUrl -> url
-        is ActionParameters.PlayMusic -> query
-        is ActionParameters.PlayVideo -> query
-        is ActionParameters.Call -> target
-        is ActionParameters.SendSms -> targetAndMessage
-        ActionParameters.OpenSettings -> null
-        is ActionParameters.Navigate -> destination
-        is ActionParameters.SetAlarm -> hour.toString()
-        is ActionParameters.SetTimer -> minutes.toString()
-        ActionParameters.GoHome -> null
-        ActionParameters.GoBack -> null
-        ActionParameters.OpenNotifications -> null
-        ActionParameters.RecentApps -> null
-        is ActionParameters.ToggleWifi -> state
-        is ActionParameters.ToggleBluetooth -> state
-        is ActionParameters.SetBrightness -> percent.toString()
-        ActionParameters.OpenQuickSettings -> null
-        is ActionParameters.SendWhatsApp -> targetAndMessage
-        is ActionParameters.CreateTask -> value
-        is ActionParameters.CompleteTask -> title
-        is ActionParameters.RememberPreference -> value
-        ActionParameters.ShowMemories -> null
-        is ActionParameters.ForgetMemory -> value
-        ActionParameters.Chat -> null
+    private fun invokeTool(
+        tool: AssistantTool<out ActionParameters>,
+        context: Context,
+        request: ActionRequest<out ActionParameters>
+    ): ActionError? {
+        val (typedTool, typedRequest) = typedToolAndRequest(tool, request)
+        return typedTool.precondition(context, typedRequest)
     }
+
+    private suspend fun executeTool(
+        tool: AssistantTool<out ActionParameters>,
+        context: Context,
+        request: ActionRequest<out ActionParameters>
+    ): ActionResult {
+        val (typedTool, typedRequest) = typedToolAndRequest(tool, request)
+        return typedTool.execute(context, typedRequest)
+    }
+
+    private suspend fun verifyTool(
+        tool: AssistantTool<out ActionParameters>,
+        context: Context,
+        request: ActionRequest<out ActionParameters>,
+        started: ActionResult
+    ): ActionResult {
+        val (typedTool, typedRequest) = typedToolAndRequest(tool, request)
+        return typedTool.verify(context, typedRequest, started)
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun typedToolAndRequest(
+        tool: AssistantTool<out ActionParameters>,
+        request: ActionRequest<out ActionParameters>
+    ): Pair<AssistantTool<ActionParameters>, ActionRequest<ActionParameters>> {
+        check(tool.parameterType.isInstance(request.parameters))
+        return (tool as AssistantTool<ActionParameters>) to (request as ActionRequest<ActionParameters>)
+    }
+
+    companion object { private const val ACTION_TIMEOUT_MS = 20_000L }
 }
