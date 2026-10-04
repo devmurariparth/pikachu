@@ -30,8 +30,8 @@ object DeviceControlManager {
             }
             if (tryLaunchIntent(context, panelIntent)) {
                 val stateText = when (turnOn) {
-                    true -> "Turning on Wi-Fi."
-                    false -> "Turning off Wi-Fi."
+                    true -> "Opening Wi-Fi controls so you can turn Wi-Fi on."
+                    false -> "Opening Wi-Fi controls so you can turn Wi-Fi off."
                     null -> "Opening Wi-Fi controls."
                 }
                 return DeviceControlResult(
@@ -71,9 +71,9 @@ object DeviceControlManager {
         }
         if (tryLaunchIntent(context, bluetoothPanelIntent)) {
             val stateText = when (turnOn) {
-                true -> "Turning on Bluetooth."
-                false -> "Turning off Bluetooth."
-                null -> "Opening Bluetooth controls."
+                true -> "Opening Bluetooth settings so you can turn Bluetooth on."
+                false -> "Opening Bluetooth settings so you can turn Bluetooth off."
+                null -> "Opening Bluetooth settings."
             }
             return DeviceControlResult(
                 success = true,

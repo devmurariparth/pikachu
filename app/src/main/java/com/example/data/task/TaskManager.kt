@@ -6,9 +6,9 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.example.AssistantLogger
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -34,7 +34,6 @@ object TaskManager {
     private const val TAG = "TaskManager"
     private var appContext: Context? = null
     private var taskDatabase: TaskDatabase? = null
-    private val scope = CoroutineScope(Dispatchers.IO)
 
     var tasksFlow: Flow<List<TaskItem>>? = null
         private set
@@ -54,11 +53,8 @@ object TaskManager {
     }
 
     suspend fun getAllTasks(): List<TaskItem> = withContext(Dispatchers.IO) {
-        val list = mutableListOf<TaskItem>()
-        // Return latest list
         val db = taskDatabase ?: return@withContext emptyList()
-        // Simple query
-        return@withContext db.taskDao().findTaskByTitle("")?.let { listOf(it) } ?: emptyList()
+        db.taskDao().getAllTasks().first()
     }
 
     /**

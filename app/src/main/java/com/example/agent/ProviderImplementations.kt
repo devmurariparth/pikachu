@@ -335,7 +335,7 @@ class OpenAiProvider(
     }
 
     companion object {
-        private const val DEFAULT_MODEL = "gpt-5.6-luna"
+        private const val DEFAULT_MODEL = "gpt-6-luna"
         private const val MAX_RETRIES = 2
         private const val MAX_TIMEOUT_MS = 60_000L
     }
