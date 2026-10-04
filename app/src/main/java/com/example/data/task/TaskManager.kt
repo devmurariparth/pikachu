@@ -95,14 +95,23 @@ object TaskManager {
      */
     suspend fun setTaskCompleted(taskId: Long, completed: Boolean) = withContext(Dispatchers.IO) {
         val dao = getDao()
-        val task = dao.getTaskById(taskId)
-        if (task != null) {
-            dao.setTaskCompleted(taskId, completed)
-            if (completed && task.reminderWorkId != null) {
-                cancelReminderWork(task.reminderWorkId)
-            }
-            AssistantLogger.i(TAG, "Updated task #$taskId isCompleted=$completed")
+        val task = dao.getTaskById(taskId) ?: return@withContext
+        dao.setTaskCompleted(taskId, completed)
+
+        if (completed) {
+            task.reminderWorkId?.let(::cancelReminderWork)
+            dao.updateWorkId(taskId, null)
+        } else if (
+            task.reminderTimeMillis != null &&
+            task.reminderTimeMillis > System.currentTimeMillis()
+        ) {
+            // Completing a task cancels its reminder; uncompleting it should restore that reminder.
+            task.reminderWorkId?.let(::cancelReminderWork)
+            val restoredWorkId = scheduleWorkManagerReminder(task.copy(isCompleted = false, reminderWorkId = null))
+            dao.updateWorkId(taskId, restoredWorkId)
         }
+
+        AssistantLogger.i(TAG, "Updated task #$taskId isCompleted=$completed")
     }
 
     /**
@@ -122,16 +131,19 @@ object TaskManager {
      */
     suspend fun updateTask(task: TaskItem) = withContext(Dispatchers.IO) {
         val dao = getDao()
-        dao.updateTask(task)
-        // If reminder changed, reschedule
-        if (task.reminderTimeMillis != null && task.reminderTimeMillis > System.currentTimeMillis() && !task.isCompleted) {
-            if (task.reminderWorkId != null) {
-                cancelReminderWork(task.reminderWorkId)
-            }
-            val newWorkId = scheduleWorkManagerReminder(task)
-            if (newWorkId != null) {
-                dao.updateWorkId(task.id, newWorkId)
-            }
+        val existing = dao.getTaskById(task.id)
+        existing?.reminderWorkId?.let(::cancelReminderWork)
+
+        // Clear stale reminder metadata before applying the new task state.
+        dao.updateTask(task.copy(reminderWorkId = null))
+
+        if (
+            task.reminderTimeMillis != null &&
+            task.reminderTimeMillis > System.currentTimeMillis() &&
+            !task.isCompleted
+        ) {
+            val newWorkId = scheduleWorkManagerReminder(task.copy(reminderWorkId = null))
+            dao.updateWorkId(task.id, newWorkId)
         }
     }
 
