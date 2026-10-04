@@ -323,8 +323,13 @@ class VoiceInteractionManager(
     fun destroy() {
         if (destroyed) return
         destroyed = true
-        pause()
+        // Destruction is a lifecycle cleanup event, not a user cancellation.
+        // Avoid cancelListening() here because it publishes VoiceState.Cancelled
+        // and makes a destroyed manager appear to have an active cancellation.
         mainHandler.removeCallbacksAndMessages(null)
+        stopListeningInternal()
+        runCatching { ttsEngine.stop() }
+        _isTtsSpeaking.value = false
         runCatching { speechRecognizer?.destroy() }
         speechRecognizer = null
         ttsEngine.shutdown()
