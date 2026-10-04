@@ -75,7 +75,7 @@ class AgentPipeline(
         }
         val execution = planPipeline.execute(context.applicationContext, plan, actionContext, onActionExecutionStarting)
         val outcome = toOutcome(plan, execution, localPlan != null)
-        if (execution.steps.none { it.status == PlanStepStatus.FAILED || it.status == PlanStepStatus.CANCELLED }) {
+        if (execution.completed) {
             lastSafeGoal = plan.goal.takeIf { isSafeContextPlan(plan) }
         }
         return Result.success(outcome)

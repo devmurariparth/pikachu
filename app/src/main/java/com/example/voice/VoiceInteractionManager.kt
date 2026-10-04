@@ -106,6 +106,7 @@ class VoiceInteractionManager(
         }
 
         mainHandler.post {
+            if (destroyed) return@post
             try {
                 if (listening) stopListeningInternal()
                 if (speechRecognizer == null) createRecognizerOnMainThread()
@@ -236,6 +237,7 @@ class VoiceInteractionManager(
     }
 
     override fun onRmsChanged(rmsdB: Float) {
+        if (destroyed || !listening) return
         _audioRmsLevel.value = ((rmsdB + 2f) / 12f).coerceIn(0f, 1f)
     }
 
@@ -284,7 +286,7 @@ class VoiceInteractionManager(
     }
 
     override fun onResults(results: Bundle?) {
-        if (!listening && _voiceState.value !is VoiceState.Processing) return
+        if (destroyed || (!listening && _voiceState.value !is VoiceState.Processing)) return
         listening = false
         mainHandler.removeCallbacks(timeoutRunnable)
         _audioRmsLevel.value = 0f
@@ -301,6 +303,7 @@ class VoiceInteractionManager(
     }
 
     override fun onPartialResults(partialResults: Bundle?) {
+        if (destroyed || !listening) return
         partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
             ?.firstOrNull()
             ?.takeIf { it.isNotBlank() }

@@ -30,7 +30,7 @@ class ActionPlanPipeline(
     private val executeStep: suspend (Context, ActionRequest<out ActionParameters>, ActionContext) -> ActionResult =
         { context, request, actionContext -> runtime.execute(context, request, actionContext) },
     private val retryDelay: suspend (Long) -> Unit = { delay(it) },
-    maxRetries: Int = 1
+    maxRetries: Int = 2
 ) {
     private val maxRetries = maxRetries.coerceIn(0, MAX_RETRIES)
 
@@ -44,11 +44,12 @@ class ActionPlanPipeline(
         }
 
         val ids = linkedSetOf<String>()
+        val requestIds = linkedSetOf<String>()
         val tools = linkedSetOf<ActionName>()
         var highestRisk = com.example.agent.AgentRiskLevel.LOW
         for (step in plan.steps) {
-            if (step.id.isBlank() || !ids.add(step.id) || step.request.id.isBlank()) {
-                return invalid("Every plan step needs a unique id.")
+            if (step.id.isBlank() || !ids.add(step.id) || step.request.id.isBlank() || !requestIds.add(step.request.id)) {
+                return invalid("Every plan step and action request needs a unique id.")
             }
             if (step.expectedResult.isBlank()) return invalid("Every plan step needs an expected result.")
             if (step.dependsOn.size != step.dependsOn.toSet().size || step.dependsOn.any { it !in ids || it == step.id }) {

@@ -93,6 +93,30 @@ class AgentPipelineTest {
         assertEquals("gu", result.response.language)
     }
 
+    @Test fun a_started_action_does_not_become_follow_up_context_without_verification() = runTest {
+        val requests = mutableListOf<AgentPlanningRequest>()
+        val runtime = ActionRuntime()
+        val planPipeline = ActionPlanPipeline(runtime, executeStep = { _, request, _ ->
+            ActionResult.Started(request.id, request.name, "Accepted by Android")
+        })
+        val pipeline = AgentPipeline(runtime, planPipeline)
+
+        pipeline.execute(
+            ApplicationProvider.getApplicationContext(),
+            "search the web for cats",
+            planner = { error("Search should use local fast path.") }
+        ).getOrThrow()
+
+        pipeline.execute(
+            ApplicationProvider.getApplicationContext(),
+            "tell me more about it",
+            planner = { request -> requests += request; Result.success(responsePlan()) }
+        ).getOrThrow()
+
+        assertEquals(1, requests.size)
+        assertNull(requests.single().recentGoal)
+    }
+
     @Test fun safe_search_goal_is_available_for_an_unambiguous_follow_up_only() = runTest {
         val requests = mutableListOf<AgentPlanningRequest>()
         val runtime = ActionRuntime()

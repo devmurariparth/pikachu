@@ -38,6 +38,14 @@ class VoiceInteractionLifecycleTest {
         assertNotNull(service.onNewSession(Bundle()))
     }
 
+    @Test fun destroyed_voice_manager_ignores_late_start_and_stays_idle() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val manager = VoiceInteractionManager(context) {}
+        manager.destroy()
+        manager.startListening()
+        assertEquals(VoiceState.Idle, manager.voiceState.value)
+    }
+
     @Test fun invocation_contract_targets_existing_chat_activity_and_marks_system_entry() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val intent = SystemAssistantInvocation.createActivityIntent(context)
