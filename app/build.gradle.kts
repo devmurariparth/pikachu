@@ -14,11 +14,11 @@ android {
   compileSdk = 36
 
   defaultConfig {
-    applicationId = "com.mj.agent"
+    applicationId = "com.mj.agent.v06"
     minSdk = 24
     targetSdk = 36
-    versionCode = 6
-    versionName = "0.6.0"
+    versionCode = 7
+    versionName = "0.6.1"
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
