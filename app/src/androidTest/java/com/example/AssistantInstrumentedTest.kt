@@ -33,7 +33,7 @@ class AssistantInstrumentedTest {
     fun useAppContext() {
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
         assertNotNull(appContext)
-        assertEquals("com.aistudio.mjassistant.abxyzt", appContext.packageName)
+        assertEquals("com.mj.agent", appContext.packageName)
     }
 
     @Test
