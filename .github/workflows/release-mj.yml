@@ -1,4 +1,4 @@
-name: Build and Release MJ v0.6.0
+name: Build and Release MJ v0.6.1
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: mj-release-v0.6.0
+  group: mj-release-v0.6.1
   cancel-in-progress: false
 
 jobs:
@@ -49,7 +49,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v6
         with:
-          name: MJ-v0.6.0-debug-APK
+          name: MJ-v0.6.1-debug-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
@@ -57,10 +57,10 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.6.0
-          name: MJ v0.6.0
+          tag_name: v0.6.1
+          name: MJ v0.6.1
           body: |
-            MJ Android test release (versionName 0.6.0, versionCode 6).
+            MJ Android test release (versionName 0.6.1, versionCode 7).
 
             This build is based on the expanded MJ source in this repository. It includes the typed action pipeline, permission/policy checks, multilingual local routing, contact/call handling, music providers, messaging, tasks, assistant UI and the system voice-interaction entry point.
 
